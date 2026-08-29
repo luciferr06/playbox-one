@@ -1,0 +1,698 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Playbox — Ticket Booking</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<style>
+  :root{
+    --bg-night:#0D0D0D;
+    --bg-panel:#161616;
+    --accent-amber:#F5F5F5;
+    --accent-amber-dim:#55555588;
+    --accent-gold:#CFCFCF;
+    --accent-gold-dim:#3A3A3A;
+    --accent-rose:#AAAAAA;
+    --accent-rose-dim:#2A2A2A;
+    --accent-sel:#F5F5F5;
+    --text-cream:#F5F5F5;
+    --text-muted:#8A8A8A;
+    --border-soft:#2E2E2E;
+  }
+  *{box-sizing:border-box;}
+  body{
+    margin:0;
+    background:var(--bg-night);
+    color:var(--text-cream);
+    font-family:'Inter',sans-serif;
+    min-height:100vh;
+    display:flex;
+    justify-content:center;
+    padding:24px 12px 60px;
+  }
+  .ticket-wrap{ width:100%; max-width:420px; }
+  .stub{
+    background:var(--bg-panel);
+    border:1px solid var(--border-soft);
+    border-radius:18px;
+    padding:22px 22px 18px;
+  }
+  .eyebrow{
+    font-family:'JetBrains Mono',monospace;
+    font-size:11px; letter-spacing:.18em; text-transform:uppercase;
+    color:var(--accent-amber); margin:0 0 6px;
+  }
+  h1{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:28px; line-height:1.1; margin:0 0 10px; }
+  .meta{ display:flex; gap:16px; flex-wrap:wrap; font-size:13px; color:var(--text-muted); margin-bottom:4px; }
+  .meta span b{color:var(--text-cream); font-weight:600;}
+
+  .perforation{
+    position:relative; height:24px; margin:14px -22px;
+    background-image:radial-gradient(circle at 0 12px, var(--bg-night) 8px, transparent 9px),
+                      radial-gradient(circle at 100% 12px, var(--bg-night) 8px, transparent 9px);
+  }
+  .perforation::after{
+    content:""; position:absolute; left:22px; right:22px; top:12px;
+    border-top:1px dashed var(--border-soft);
+  }
+
+  .counter-row{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:16px; }
+  .counter{ font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--text-muted); }
+  .counter b{color:var(--accent-amber); font-size:16px;}
+  .live-dot{
+    display:inline-block; width:7px;height:7px; border-radius:50%;
+    background:var(--accent-sel); margin-right:6px; animation:pulse 1.8s infinite; vertical-align:middle;
+  }
+  @keyframes pulse{ 0%,100%{opacity:1;} 50%{opacity:.35;} }
+
+  .screen{
+    text-align:center; font-family:'JetBrains Mono',monospace; font-size:10px; letter-spacing:.3em;
+    color:var(--text-muted); background:linear-gradient(180deg, #2A3040, transparent);
+    border-radius:50% 50% 0 0 / 100% 100% 0 0; padding:10px 0 16px; margin-bottom:18px;
+  }
+
+  .rows{ display:flex; flex-direction:column; align-items:center; gap:10px; margin-bottom:6px; }
+  .row{ display:flex; gap:8px; }
+  .seat{
+    width:42px; height:42px; border-radius:6px 6px 10px 10px;
+    border:1px solid var(--accent-amber-dim); background:transparent; color:var(--accent-amber);
+    font-family:'JetBrains Mono',monospace; font-size:11px;
+    display:flex; align-items:center; justify-content:center;
+    cursor:pointer; transition:transform .12s ease, background .15s ease; padding:0;
+  }
+  .seat:hover:not(:disabled){ transform:translateY(-2px); }
+  .seat.booked{ background:var(--accent-rose-dim); border-color:var(--accent-rose); color:var(--accent-rose); cursor:not-allowed; }
+  .seat.pending{ background:var(--accent-gold-dim); border-color:var(--accent-gold); color:var(--accent-gold); cursor:not-allowed; animation:pulse 1.6s infinite; }
+  .seat.selected{ background:var(--accent-sel); border-color:var(--accent-sel); color:#111111; font-weight:700; transform:translateY(-3px); }
+
+  .legend{ display:flex; justify-content:center; gap:14px; font-size:10.5px; color:var(--text-muted); margin:16px 0 4px; flex-wrap:wrap; }
+  .legend span{display:flex; align-items:center; gap:5px;}
+  .swatch{width:11px;height:11px;border-radius:3px; display:inline-block;}
+  .sw-avail{border:1px solid var(--accent-amber-dim);}
+  .sw-booked{background:var(--accent-rose-dim); border:1px solid var(--accent-rose);}
+  .sw-sel{background:var(--accent-sel);}
+
+  .selection-summary{
+    text-align:center; font-family:'JetBrains Mono',monospace; font-size:12px;
+    color:var(--text-muted); margin-top:10px;
+  }
+  .selection-summary b{ color:var(--accent-amber); }
+
+  .cta-bar{
+    position:sticky; bottom:0; margin-top:14px; padding-top:14px; border-top:1px dashed var(--border-soft);
+  }
+  button.primary{
+    width:100%; padding:14px; border:none; border-radius:10px;
+    background:var(--accent-amber); color:#111111; font-family:'Inter',sans-serif;
+    font-weight:700; font-size:15px; cursor:pointer;
+  }
+  button.primary:disabled{ background:#3A3F4E; color:#7A7F8E; cursor:not-allowed; }
+  button.ghost{
+    width:100%; padding:12px; margin-top:8px; border:1px solid var(--border-soft); border-radius:10px;
+    background:transparent; color:var(--text-muted); font-family:'Inter',sans-serif; font-size:13px; cursor:pointer;
+  }
+  .footer-link{ text-align:center; margin-top:14px; }
+  .footer-link button{
+    background:none; border:none; color:var(--text-muted); font-size:11px;
+    text-decoration:underline; cursor:pointer; font-family:'Inter',sans-serif;
+  }
+  .contact-section{
+    max-width:420px; width:100%; margin:14px auto 0; text-align:center;
+    font-family:'Inter',sans-serif; font-size:12px; color:var(--text-muted);
+  }
+  .contact-section .label{ text-transform:uppercase; letter-spacing:.1em; font-size:10px; margin:0 0 10px; }
+  .contact-icons{ display:flex; justify-content:center; gap:12px; }
+  .contact-icons a{
+    width:38px; height:38px; border-radius:50%; border:1px solid var(--border-soft);
+    display:flex; align-items:center; justify-content:center; color:var(--text-cream);
+    font-size:16px; text-decoration:none; transition:transform .12s ease;
+  }
+  .contact-icons a:hover{ transform:translateY(-2px); border-color:var(--accent-amber-dim); }
+  .contact-icons a.disabled{ opacity:.3; pointer-events:none; }
+
+  .overlay{
+    position:fixed; inset:0; background:rgba(10,11,16,.75);
+    display:flex; align-items:flex-end; justify-content:center; z-index:10;
+  }
+  .sheet{
+    width:100%; max-width:420px; background:var(--bg-panel); border-radius:18px 18px 0 0;
+    padding:22px; border:1px solid var(--border-soft); border-bottom:none;
+    max-height:88vh; overflow-y:auto;
+  }
+  .sheet h2{ font-family:'Space Grotesk',sans-serif; font-weight:700; font-size:20px; margin:0 0 4px; }
+  .sheet p.sub{color:var(--text-muted); font-size:13px; margin:0 0 16px;}
+  label{
+    display:block; font-size:11px; letter-spacing:.05em; text-transform:uppercase;
+    color:var(--text-muted); margin:12px 0 5px;
+  }
+  input{
+    width:100%; padding:11px 12px; border-radius:8px; border:1px solid var(--border-soft);
+    background:#151822; color:var(--text-cream); font-family:'Inter',sans-serif; font-size:14px;
+  }
+  input:focus{outline:2px solid var(--accent-amber); outline-offset:1px;}
+  .price-line{ display:flex; justify-content:space-between; font-size:14px; margin:10px 0 4px; color:var(--text-muted); }
+  .price-line b{color:var(--text-cream); font-size:16px;}
+  .note{font-size:11px; color:var(--text-muted); margin-top:10px; line-height:1.5;}
+  .error{ color:var(--accent-rose); font-size:12px; margin-top:10px; }
+  .close-x{ background:none; border:none; color:var(--text-muted); font-size:14px; float:right; cursor:pointer; text-transform:uppercase; letter-spacing:.03em; }
+
+  .qr-box{ text-align:center; background:#F2EDE4; border-radius:10px; padding:14px; margin:14px 0; display:flex; align-items:center; justify-content:center; }
+  .qr-box canvas, .qr-box img{ width:170px; height:170px; display:block; margin:0 auto; }
+  .upi-id{
+    font-family:'JetBrains Mono',monospace; text-align:center; font-size:14px;
+    background:#151822; border:1px dashed var(--border-soft); border-radius:8px; padding:10px; margin-bottom:4px;
+  }
+
+  .success .icon{
+    width:52px;height:52px;border-radius:50%; background:var(--accent-amber);
+    display:flex;align-items:center;justify-content:center; font-size:24px; margin:0 auto 14px; color:#111111;
+  }
+  .success{text-align:center;}
+  .ticket-code{
+    font-family:'JetBrains Mono',monospace; letter-spacing:.1em; background:#151822;
+    border:1px dashed var(--border-soft); border-radius:8px; padding:12px; margin:14px 0; font-size:14px;
+    word-break:break-word;
+  }
+  .spinner{
+    width:34px;height:34px; border:3px solid var(--border-soft); border-top-color:var(--accent-amber);
+    border-radius:50%; margin:20px auto; animation:spin .8s linear infinite;
+  }
+  @keyframes spin{to{transform:rotate(360deg);}}
+
+  .org-section{ border-bottom:1px dashed var(--border-soft); padding-bottom:16px; margin-bottom:16px; }
+  .org-row{ border:1px solid var(--border-soft); border-radius:10px; padding:12px; margin-bottom:10px; }
+  .org-row .top{ display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px; }
+  .org-row .top b{ color:var(--accent-gold); }
+  .org-row .sub{ font-size:12px; color:var(--text-muted); margin-bottom:8px; }
+  .org-actions button{
+    width:100%; padding:8px; border-radius:7px; border:1px solid var(--accent-rose); font-size:12px;
+    cursor:pointer; font-weight:600; background:var(--accent-rose-dim); color:var(--accent-rose);
+  }
+  .empty-state{ color:var(--text-muted); font-size:13px; text-align:center; padding:12px 0; }
+</style>
+</head>
+<body>
+
+<div class="ticket-wrap">
+  <div class="stub">
+    <p class="eyebrow">Live Session · Kalinga Nagar</p>
+    <h1>Playbox</h1>
+    <div class="meta">
+      <span id="eventDate">—</span>
+      <span id="showTimingSpan">Show Timing: —</span>
+    </div>
+    <div class="meta"><span>Kalinga Nagar, Bhubaneswar</span></div>
+
+    <div class="perforation"></div>
+
+    <div class="meta"><span id="movieSpan">Movie: —</span></div>
+    <div class="meta"><span>Ticket price: <b>₹1</b></span></div>
+
+    <div class="counter-row">
+      <span class="counter"><span class="live-dot"></span><b id="availCount">--</b> seats left</span>
+      <span class="counter" id="lastUpdated">syncing…</span>
+    </div>
+
+    <div class="screen">— SCREEN —</div>
+
+    <div class="rows" id="rows"></div>
+
+    <div class="legend">
+      <span><i class="swatch sw-avail"></i>Available</span>
+      <span><i class="swatch sw-sel"></i>Selected</span>
+      <span><i class="swatch sw-booked"></i>Booked</span>
+    </div>
+
+    <div class="selection-summary" id="selectionSummary"></div>
+
+    <div class="cta-bar">
+      <button class="primary" id="bookBtn" disabled>Select Seat</button>
+    </div>
+
+    <div class="footer-link">
+      <button id="orgLink">Organizer Panel</button>
+    </div>
+  </div>
+
+  <div class="contact-section">
+    <p class="label">Contact</p>
+    <div class="contact-icons">
+      <a id="contactEmailIcon" href="#" title="Email" class="disabled">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"></rect><path d="M22 6l-10 7L2 6"></path></svg>
+      </a>
+      <a id="contactInstaIcon" href="#" target="_blank" rel="noopener" title="Instagram" class="disabled">
+        <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5"></rect><circle cx="12" cy="12" r="4"></circle><circle cx="17.5" cy="6.5" r="1"></circle></svg>
+      </a>
+    </div>
+  </div>
+</div>
+
+<div id="modalRoot"></div>
+
+<script>
+const ROWS = 6;
+const PER_ROW = 4;
+const TOTAL_SEATS = ROWS * PER_ROW;
+const PRICE = 1;
+const TAX_RATE = 0.05;
+const UPI_ID = 'luciferr.06@ybl';
+const UPI_PAYEE_NAME = 'Playbox';
+const ORG_PIN = '1212';
+
+function blankSeat(){ return { status:'available', name:'', contact:'', email:'', ref:'', time:'' }; }
+function normalizeSeats(arr){
+  if(!Array.isArray(arr) || arr.length !== TOTAL_SEATS) return Array.from({length: TOTAL_SEATS}, blankSeat);
+  return arr.map(s => {
+    if(!s || typeof s !== 'object' || !('status' in s) || !['available','pending','booked'].includes(s.status)){
+      return blankSeat();
+    }
+    return s;
+  });
+}
+function toTitleCase(str){
+  if(!str) return '';
+  return str.trim().toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase());
+}
+function money(n){ return '₹' + n.toFixed(2).replace(/\.00$/, ''); }
+
+let seats = Array.from({length: TOTAL_SEATS}, blankSeat);
+let selectedSeats = new Set();
+let eventInfo = { movie:'', showTiming:'', contactEmail:'luciferr.06@icloud.com', instagram:'@playbox.one' };
+
+const rowsEl = document.getElementById('rows');
+const bookBtn = document.getElementById('bookBtn');
+const availCountEl = document.getElementById('availCount');
+const lastUpdatedEl = document.getElementById('lastUpdated');
+const modalRoot = document.getElementById('modalRoot');
+const selectionSummaryEl = document.getElementById('selectionSummary');
+
+function renderEventDate(){
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short' });
+  document.getElementById('eventDate').textContent = dateStr;
+}
+renderEventDate();
+
+function renderEventInfo(){
+  document.getElementById('movieSpan').textContent = 'Movie: ' + (eventInfo.movie ? eventInfo.movie : '—');
+  document.getElementById('showTimingSpan').textContent = 'Show Timing: ' + (eventInfo.showTiming ? eventInfo.showTiming : '—');
+
+  const emailIcon = document.getElementById('contactEmailIcon');
+  if(eventInfo.contactEmail){
+    emailIcon.href = 'mailto:' + eventInfo.contactEmail;
+    emailIcon.title = eventInfo.contactEmail;
+    emailIcon.classList.remove('disabled');
+  } else {
+    emailIcon.href = '#'; emailIcon.title = 'Email'; emailIcon.classList.add('disabled');
+  }
+
+  const instaIcon = document.getElementById('contactInstaIcon');
+  if(eventInfo.instagram){
+    const handle = eventInfo.instagram.replace(/^@/, '');
+    instaIcon.href = 'https://instagram.com/' + handle;
+    instaIcon.title = eventInfo.instagram;
+    instaIcon.classList.remove('disabled');
+  } else {
+    instaIcon.href = '#'; instaIcon.title = 'Instagram'; instaIcon.classList.add('disabled');
+  }
+}
+
+function renderSeats(){
+  rowsEl.innerHTML = '';
+  for(let r=0; r<ROWS; r++){
+    const rowDiv = document.createElement('div');
+    rowDiv.className = 'row';
+    for(let c=0; c<PER_ROW; c++){
+      const idx = r*PER_ROW + c;
+      const seatNum = idx + 1;
+      const s = seats[idx];
+      const btn = document.createElement('button');
+      btn.className = 'seat';
+      btn.textContent = seatNum;
+      btn.setAttribute('aria-label', 'Seat ' + seatNum + ' — ' + s.status);
+
+      const offset = c - (PER_ROW-1)/2;
+      const rotate = offset * 1.6;
+      const lift = Math.abs(offset) * 2.5;
+      btn.style.transform = `rotate(${rotate}deg) translateY(${lift}px)`;
+
+      if(s.status === 'booked'){ btn.classList.add('booked'); btn.disabled = true; }
+      else if(s.status === 'pending'){ btn.classList.add('pending'); btn.disabled = true; }
+      if(selectedSeats.has(idx)){ btn.classList.add('selected'); }
+
+      btn.addEventListener('click', () => {
+        if(s.status !== 'available') return;
+        if(selectedSeats.has(idx)) selectedSeats.delete(idx);
+        else selectedSeats.add(idx);
+        renderSeats();
+        updateCta();
+      });
+      rowDiv.appendChild(btn);
+    }
+    rowsEl.appendChild(rowDiv);
+  }
+}
+
+function updateCta(){
+  const availCount = seats.filter(s => s.status === 'available').length;
+  availCountEl.textContent = availCount;
+
+  if(selectedSeats.size > 0){
+    const subtotal = selectedSeats.size * PRICE;
+    const tax = subtotal * TAX_RATE;
+    const total = subtotal + tax;
+    const seatList = [...selectedSeats].map(i => i+1).sort((a,b)=>a-b).join(', ');
+    selectionSummaryEl.innerHTML = `Seat${selectedSeats.size>1?'s':''} ${seatList} · <b>${money(total)}</b> incl. tax`;
+    bookBtn.disabled = false;
+    bookBtn.textContent = 'Book Now';
+  } else {
+    selectionSummaryEl.innerHTML = '';
+    bookBtn.disabled = availCount === 0;
+    bookBtn.textContent = availCount === 0 ? 'Sold out' : 'Select Seat';
+  }
+}
+
+async function loadEventInfo(){
+  try{
+    const res = await window.storage.get('event-info', true);
+    if(res && res.value){
+      const stored = JSON.parse(res.value);
+      eventInfo = {
+        movie: stored.movie || eventInfo.movie,
+        showTiming: stored.showTiming || eventInfo.showTiming,
+        contactEmail: stored.contactEmail || eventInfo.contactEmail,
+        instagram: stored.instagram || eventInfo.instagram
+      };
+    }
+  }catch(e){ /* not set yet */ }
+  renderEventInfo();
+}
+
+async function loadSeats(){
+  try{
+    const res = await window.storage.get('seats-status', true);
+    if(res && res.value){
+      seats = normalizeSeats(JSON.parse(res.value));
+    } else {
+      await window.storage.set('seats-status', JSON.stringify(seats), true);
+    }
+  }catch(e){
+    try{ await window.storage.set('seats-status', JSON.stringify(seats), true); }
+    catch(e2){ console.error('storage init failed', e2); }
+  }
+  selectedSeats.forEach(idx => {
+    if(seats[idx].status !== 'available') selectedSeats.delete(idx);
+  });
+  renderSeats();
+  updateCta();
+  lastUpdatedEl.textContent = 'updated ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
+}
+
+setInterval(loadSeats, 4000);
+setInterval(loadEventInfo, 8000);
+loadEventInfo();
+loadSeats();
+
+bookBtn.addEventListener('click', () => {
+  if(selectedSeats.size === 0) return;
+  openDetailsSheet();
+});
+
+document.getElementById('orgLink').addEventListener('click', openPinSheet);
+
+function closeSheet(){ modalRoot.innerHTML = ''; }
+
+function openDetailsSheet(){
+  const seatNums = [...selectedSeats].map(i => i+1).sort((a,b)=>a-b);
+  const subtotal = seatNums.length * PRICE;
+  const tax = subtotal * TAX_RATE;
+  const total = subtotal + tax;
+  const upiLink = `upi://pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent(UPI_PAYEE_NAME)}&am=${total.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Seats ' + seatNums.join(','))}`;
+
+  modalRoot.innerHTML = `
+    <div class="overlay">
+      <div class="sheet">
+        <button class="close-x" id="closeX">✕ close</button>
+        <h2>Book seat${seatNums.length>1?'s':''} ${seatNums.join(', ')}</h2>
+        <p class="sub">${seatNums.length} × ₹${PRICE} + 5% tax</p>
+
+        <button type="button" id="upiAppBtn" class="primary" style="display:block; text-align:center;">Pay ${money(total)} in UPI app</button>
+        <p class="note" style="text-align:center;">Tapping this opens your preferred UPI app (GPay, PhonePe, Paytm) with the amount filled in. On desktop, scan the code below instead.</p>
+
+        <div class="qr-box" id="qrBox"></div>
+        <div class="upi-id">${UPI_ID}</div>
+
+        <div class="price-line"><span>Subtotal</span><span>${money(subtotal)}</span></div>
+        <div class="price-line"><span>Tax (5%)</span><span>${money(tax)}</span></div>
+        <div class="price-line"><b>Total</b><b>${money(total)}</b></div>
+
+        <label for="fname">Full name</label>
+        <input id="fname" type="text" placeholder="Jordan Rivers" />
+        <label for="fcontact">Contact</label>
+        <input id="fcontact" type="tel" placeholder="+91 98765 43210" />
+        <label for="femail">Email</label>
+        <input id="femail" type="email" placeholder="you@example.com" />
+        <label for="ref">UPI transaction ref (from your app, after paying)</label>
+        <input id="ref" type="text" placeholder="e.g. 234567891234" required />
+
+        <div id="formError" class="error" style="display:none;"></div>
+        <div class="cta-bar" style="border-top:none; margin-top:16px;">
+          <button class="primary" id="continueBtn">Confirm Booking</button>
+          <button class="ghost" id="cancelBtn">Cancel</button>
+        </div>
+        <p class="note">This immediately marks your seat(s) as booked. Only confirm after the payment has actually gone through.</p>
+      </div>
+    </div>
+  `;
+  document.getElementById('closeX').onclick = closeSheet;
+  document.getElementById('cancelBtn').onclick = closeSheet;
+  document.getElementById('upiAppBtn').onclick = () => { window.location.href = upiLink; };
+  try{
+    new QRCode(document.getElementById('qrBox'), {
+      text: upiLink, width:170, height:170,
+      colorDark:'#111111', colorLight:'#F2EDE4'
+    });
+  }catch(e){
+    console.error('QR generation failed', e);
+    document.getElementById('qrBox').innerHTML = '<p style="color:#111111; font-size:12px; padding:20px;">QR unavailable — use the UPI ID below.</p>';
+  }
+  document.getElementById('continueBtn').onclick = () => {
+    const name = document.getElementById('fname').value.trim();
+    const contact = document.getElementById('fcontact').value.trim();
+    const email = document.getElementById('femail').value.trim();
+    const ref = document.getElementById('ref').value.trim();
+    const errEl = document.getElementById('formError');
+    if(!name || !email || !email.includes('@')){
+      errEl.textContent = 'Enter a valid name and email to continue.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if(!contact){
+      errEl.textContent = 'Enter a contact number.';
+      errEl.style.display = 'block';
+      return;
+    }
+    if(!ref){
+      errEl.textContent = 'Enter your UPI transaction ref so this can be verified later.';
+      errEl.style.display = 'block';
+      return;
+    }
+    errEl.style.display = 'none';
+    submitBooking(name, contact, email, ref);
+  };
+}
+
+async function submitBooking(name, contact, email, ref){
+  const seatNums = [...selectedSeats].map(i => i+1).sort((a,b)=>a-b);
+
+  modalRoot.innerHTML = `
+    <div class="overlay">
+      <div class="sheet" style="text-align:center;">
+        <h2>Confirming…</h2>
+        <div class="spinner"></div>
+        <p class="sub">Locking in your seat(s).</p>
+      </div>
+    </div>
+  `;
+  await new Promise(r => setTimeout(r, 800));
+
+  try{
+    const res = await window.storage.get('seats-status', true);
+    const current = normalizeSeats(res && res.value ? JSON.parse(res.value) : seats);
+    const taken = [...selectedSeats].filter(idx => current[idx].status !== 'available');
+    if(taken.length > 0){
+      showFailure('Seat(s) ' + taken.map(i=>i+1).join(', ') + ' were just taken by someone else. Pick different seats.');
+      seats = current; selectedSeats.clear(); renderSeats(); updateCta();
+      return;
+    }
+    const time = new Date().toISOString();
+    selectedSeats.forEach(idx => {
+      current[idx] = { status:'booked', name, contact, email, ref, time };
+    });
+    await window.storage.set('seats-status', JSON.stringify(current), true);
+    seats = current;
+    showBookedSuccess(name, seatNums);
+    selectedSeats.clear();
+    renderSeats(); updateCta();
+  }catch(e){
+    console.error(e);
+    showFailure('Something went wrong confirming your seat(s). Please try again.');
+  }
+}
+
+function showFailure(msg){
+  modalRoot.innerHTML = `
+    <div class="overlay">
+      <div class="sheet" style="text-align:center;">
+        <h2>Couldn't hold that seat</h2>
+        <p class="sub">${msg}</p>
+        <div class="cta-bar" style="border-top:none;">
+          <button class="primary" id="okBtn">Back to seat map</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('okBtn').onclick = closeSheet;
+}
+
+function showBookedSuccess(name, seatNums){
+  const code = 'PB-' + seatNums.join('-') + '-' + Math.random().toString(36).slice(2,6).toUpperCase();
+  const now = new Date();
+  const dateStr = now.toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short' });
+  modalRoot.innerHTML = `
+    <div class="overlay">
+      <div class="sheet success">
+        <div class="icon">✓</div>
+        <h2>You're in, ${toTitleCase(name).split(' ')[0]}</h2>
+        <p class="sub">Seat${seatNums.length>1?'s':''} ${seatNums.join(', ')} · Playbox · ${dateStr}</p>
+        <div class="ticket-code">${code}</div>
+        <p class="note">Your seat(s) are confirmed and booked. Keep this code for entry.</p>
+        <div class="cta-bar" style="border-top:none;">
+          <button class="primary" id="doneBtn">Done</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('doneBtn').onclick = closeSheet;
+}
+
+/* ---------- Organizer panel ---------- */
+
+function openPinSheet(){
+  modalRoot.innerHTML = `
+    <div class="overlay">
+      <div class="sheet">
+        <button class="close-x" id="closeX">✕ close</button>
+        <h2>Organizer Panel</h2>
+        <p class="sub">Enter your PIN to manage the event.</p>
+        <label for="pinInput">PIN</label>
+        <input id="pinInput" type="password" inputmode="numeric" maxlength="4" placeholder="••••" />
+        <div id="pinError" class="error" style="display:none;">Incorrect PIN.</div>
+        <div class="cta-bar" style="border-top:none; margin-top:16px;">
+          <button class="primary" id="pinGo">Enter</button>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('closeX').onclick = closeSheet;
+  document.getElementById('pinGo').onclick = () => {
+    const val = document.getElementById('pinInput').value.trim();
+    if(val === ORG_PIN){ openOrgPanel(); }
+    else { document.getElementById('pinError').style.display = 'block'; }
+  };
+}
+
+async function openOrgPanel(){
+  const seatsRes = await window.storage.get('seats-status', true).catch(() => null);
+  if(seatsRes && seatsRes.value) seats = normalizeSeats(JSON.parse(seatsRes.value));
+
+  const infoRes = await window.storage.get('event-info', true).catch(() => null);
+  if(infoRes && infoRes.value) eventInfo = JSON.parse(infoRes.value);
+
+  const booked = seats.map((s,i) => ({...s, seatNum:i+1})).filter(s => s.status === 'booked');
+
+  let rowsHtml = '';
+  if(booked.length === 0){
+    rowsHtml = '<p class="empty-state">No seats booked yet.</p>';
+  } else {
+    rowsHtml = booked.map(s => `
+      <div class="org-row">
+        <div class="top"><b>Seat ${s.seatNum}</b><span>₹${PRICE}</span></div>
+        <div class="sub">${toTitleCase(s.name)} · ${s.contact || '—'} · ${s.email}${s.ref ? ' · ref: ' + s.ref : ''}</div>
+        <div class="org-actions">
+          <button data-seat="${s.seatNum}">Release Seat (mistake / no-show)</button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  modalRoot.innerHTML = `
+    <div class="overlay">
+      <div class="sheet">
+        <button class="close-x" id="closeX">✕ close</button>
+        <h2>Organizer Panel</h2>
+
+        <div class="org-section">
+          <label for="movieInput">Movie</label>
+          <input id="movieInput" type="text" placeholder="Enter movie name" value="${eventInfo.movie || ''}" />
+          <label for="timingInput">Show timing</label>
+          <input id="timingInput" type="text" placeholder="e.g. 7:00 PM" value="${eventInfo.showTiming || ''}" />
+          <label for="contactEmailInput">Contact email</label>
+          <input id="contactEmailInput" type="email" placeholder="you@example.com" value="${eventInfo.contactEmail || ''}" />
+          <label for="instagramInput">Instagram</label>
+          <input id="instagramInput" type="text" placeholder="@yourhandle" value="${eventInfo.instagram || ''}" />
+          <button class="primary" id="saveInfoBtn" style="margin-top:12px;">Save Details</button>
+        </div>
+
+        <p class="sub">${booked.length} of ${TOTAL_SEATS} seats booked · ${money(booked.length * PRICE * (1+TAX_RATE))} collected incl. tax</p>
+        <div id="orgRows">${rowsHtml}</div>
+        <button class="ghost" id="resetAllBtn" style="margin-top:10px; border-color:var(--accent-rose); color:var(--accent-rose);">Reset ALL Seats to AVAILABLE</button>
+        <p class="note">Note: buyer names, contact, email and payment refs are stored in shared storage for this page, so treat this link as organizer-only — don't post it publicly.</p>
+      </div>
+    </div>
+  `;
+  document.getElementById('closeX').onclick = closeSheet;
+  document.getElementById('saveInfoBtn').onclick = async () => {
+    const movie = document.getElementById('movieInput').value.trim();
+    const showTiming = document.getElementById('timingInput').value.trim();
+    const contactEmail = document.getElementById('contactEmailInput').value.trim();
+    const instagram = document.getElementById('instagramInput').value.trim();
+    eventInfo = { movie, showTiming, contactEmail, instagram };
+    await window.storage.set('event-info', JSON.stringify(eventInfo), true);
+    renderEventInfo();
+    openOrgPanel();
+  };
+  document.getElementById('resetAllBtn').onclick = async () => {
+    if(!confirm('Reset all ' + TOTAL_SEATS + ' seats to available? This clears every booking.')) return;
+    const fresh = Array.from({length: TOTAL_SEATS}, blankSeat);
+    await window.storage.set('seats-status', JSON.stringify(fresh), true);
+    seats = fresh;
+    renderSeats(); updateCta();
+    openOrgPanel();
+  };
+  document.querySelectorAll('#orgRows button').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const seatNum = parseInt(btn.dataset.seat, 10);
+      await releaseSeat(seatNum);
+      openOrgPanel();
+    });
+  });
+}
+
+async function releaseSeat(seatNum){
+  try{
+    const res = await window.storage.get('seats-status', true);
+    const current = normalizeSeats(res && res.value ? JSON.parse(res.value) : seats);
+    current[seatNum - 1] = blankSeat();
+    await window.storage.set('seats-status', JSON.stringify(current), true);
+    seats = current;
+    renderSeats(); updateCta();
+  }catch(e){ console.error(e); }
+}
+</script>
+
+</body>
+</html>
