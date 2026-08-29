@@ -7,6 +7,9 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
   :root{
     --bg-night:#0D0D0D;
@@ -253,6 +256,19 @@
 <div id="modalRoot"></div>
 
 <script>
+const firebaseConfig = {
+  apiKey: "AIzaSyAtodPRNkfCvenlYU89vrQveBn8HSyKqMM",
+  authDomain: "playbox-booking-b03bb.firebaseapp.com",
+  databaseURL: "https://playbox-booking-b03bb-default-rtdb.asia-southeast1.firebasedatabase.app",
+  projectId: "playbox-booking-b03bb",
+  storageBucket: "playbox-booking-b03bb.firebasestorage.app",
+  messagingSenderId: "219526450512",
+  appId: "1:219526450512:web:405b54752400fd4c513055"
+};
+firebase.initializeApp(firebaseConfig);
+const db = firebase.database();
+const auth = firebase.auth();
+
 const ROWS = 6;
 const PER_ROW = 4;
 const TOTAL_SEATS = ROWS * PER_ROW;
@@ -260,17 +276,20 @@ let PRICE = 1;
 const TAX_RATE = 0.05;
 let UPI_ID = 'luciferr.06@ybl';
 const UPI_PAYEE_NAME = 'Playbox';
-function getTodayPassword(){
-  const now = new Date();
-  const dd = String(now.getDate()).padStart(2,'0');
-  const mm = String(now.getMonth()+1).padStart(2,'0');
-  const yyyy = now.getFullYear();
-  return 'Playbox' + dd + mm + yyyy;
-}
-
 function blankSeat(){ return { status:'available', name:'', contact:'', email:'', ref:'', time:'' }; }
-function normalizeSeats(arr){
-  if(!Array.isArray(arr) || arr.length !== TOTAL_SEATS) return Array.from({length: TOTAL_SEATS}, blankSeat);
+function seatsArrayToKeyed(arr){
+  const obj = {};
+  arr.forEach((s, i) => { obj[i+1] = s; });
+  return obj;
+}
+function normalizeSeats(raw){
+  let arr = null;
+  if(Array.isArray(raw)){
+    arr = raw;
+  } else if(raw && typeof raw === 'object'){
+    arr = Array.from({length: TOTAL_SEATS}, (_, i) => raw[i+1] || raw[String(i+1)] || null);
+  }
+  if(!arr || arr.length !== TOTAL_SEATS) return Array.from({length: TOTAL_SEATS}, blankSeat);
   return arr.map(s => {
     if(!s || typeof s !== 'object' || !('status' in s) || !['available','pending','booked'].includes(s.status)){
       return blankSeat();
@@ -382,38 +401,33 @@ function updateCta(){
   }
 }
 
-async function loadEventInfo(){
-  try{
-    const res = await window.storage.get('event-info', true);
-    if(res && res.value){
-      const stored = JSON.parse(res.value);
-      eventInfo = {
-        movie: stored.movie || eventInfo.movie,
-        showTiming: stored.showTiming || eventInfo.showTiming,
-        contactEmail: stored.contactEmail || eventInfo.contactEmail,
-        instagram: stored.instagram || eventInfo.instagram,
-        price: (stored.price !== undefined && stored.price !== null && stored.price !== '') ? Number(stored.price) : eventInfo.price,
-        upiId: stored.upiId || eventInfo.upiId
-      };
-    }
-  }catch(e){ /* not set yet */ }
+function applyIncomingEventInfo(stored){
+  if(stored){
+    eventInfo = {
+      movie: stored.movie || eventInfo.movie,
+      showTiming: stored.showTiming || eventInfo.showTiming,
+      contactEmail: stored.contactEmail || eventInfo.contactEmail,
+      instagram: stored.instagram || eventInfo.instagram,
+      price: (stored.price !== undefined && stored.price !== null && stored.price !== '') ? Number(stored.price) : eventInfo.price,
+      upiId: stored.upiId || eventInfo.upiId
+    };
+  }
   PRICE = eventInfo.price;
   UPI_ID = eventInfo.upiId;
   renderEventInfo();
+  updateCta();
 }
 
-async function loadSeats(){
-  try{
-    const res = await window.storage.get('seats-status', true);
-    if(res && res.value){
-      seats = normalizeSeats(JSON.parse(res.value));
-    } else {
-      await window.storage.set('seats-status', JSON.stringify(seats), true);
-    }
-  }catch(e){
-    try{ await window.storage.set('seats-status', JSON.stringify(seats), true); }
-    catch(e2){ console.error('storage init failed', e2); }
-  }
+function initEventInfoListener(){
+  db.ref('event-info').on('value', (snapshot) => {
+    applyIncomingEventInfo(snapshot.exists() ? snapshot.val() : null);
+  }, (err) => {
+    console.error('event-info listener error', err);
+  });
+}
+
+function applyIncomingSeats(raw){
+  seats = normalizeSeats(raw);
   selectedSeats.forEach(idx => {
     if(seats[idx].status !== 'available') selectedSeats.delete(idx);
   });
@@ -422,10 +436,26 @@ async function loadSeats(){
   lastUpdatedEl.textContent = 'updated ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
 }
 
-setInterval(loadSeats, 4000);
-setInterval(loadEventInfo, 8000);
-loadEventInfo();
-loadSeats();
+function initSeatsListener(){
+  db.ref('seats-status').on('value', (snapshot) => {
+    if(snapshot.exists()){
+      applyIncomingSeats(snapshot.val());
+    } else {
+      db.ref('seats-status').set(seatsArrayToKeyed(seats));
+      applyIncomingSeats(seats);
+    }
+  }, (err) => {
+    console.error('seats listener error', err);
+  });
+}
+
+async function getFreshSeats(){
+  const snapshot = await db.ref('seats-status').once('value');
+  return normalizeSeats(snapshot.exists() ? snapshot.val() : seats);
+}
+
+initEventInfoListener();
+initSeatsListener();
 
 bookBtn.addEventListener('click', () => {
   if(selectedSeats.size === 0) return;
@@ -531,8 +561,7 @@ async function submitBooking(name, contact, email, ref){
   await new Promise(r => setTimeout(r, 800));
 
   try{
-    const res = await window.storage.get('seats-status', true);
-    const current = normalizeSeats(res && res.value ? JSON.parse(res.value) : seats);
+    const current = await getFreshSeats();
     const taken = [...selectedSeats].filter(idx => current[idx].status !== 'available');
     if(taken.length > 0){
       showFailure('Seat(s) ' + taken.map(i=>i+1).join(', ') + ' were just taken by someone else. Pick different seats.');
@@ -540,10 +569,13 @@ async function submitBooking(name, contact, email, ref){
       return;
     }
     const time = new Date().toISOString();
+    const updates = {};
     selectedSeats.forEach(idx => {
-      current[idx] = { status:'booked', name, contact, email, ref, time };
+      const seatData = { status:'booked', name, contact, email, ref, time };
+      current[idx] = seatData;
+      updates[(idx+1)] = seatData;
     });
-    await window.storage.set('seats-status', JSON.stringify(current), true);
+    await db.ref('seats-status').update(updates);
     seats = current;
     showBookedSuccess(name, seatNums);
     selectedSeats.clear();
@@ -598,39 +630,46 @@ function openPinSheet(){
       <div class="sheet">
         <button class="close-x" id="closeX">✕ close</button>
         <h2>Organizer Panel</h2>
-        <p class="sub">Enter today's password to manage the event.</p>
-        <label for="pinInput">Password</label>
-        <input id="pinInput" type="password" placeholder="••••••••" autocomplete="off" />
-        <label style="display:flex; align-items:center; gap:6px; text-transform:none; font-size:12px; margin-top:8px;">
-          <input type="checkbox" id="showPinToggle" style="width:auto;" /> Show password
-        </label>
-        <div id="pinError" class="error" style="display:none;">Incorrect password.</div>
+        <p class="sub">Sign in to manage the event.</p>
+        <label for="orgEmail">Email</label>
+        <input id="orgEmail" type="email" placeholder="you@example.com" autocomplete="off" />
+        <label for="orgPassword">Password</label>
+        <input id="orgPassword" type="password" placeholder="••••••••" autocomplete="off" />
+        <div id="pinError" class="error" style="display:none;"></div>
         <div class="cta-bar" style="border-top:none; margin-top:16px;">
-          <button class="primary" id="pinGo">Enter</button>
+          <button class="primary" id="pinGo">Sign In</button>
         </div>
       </div>
     </div>
   `;
   document.getElementById('closeX').onclick = closeSheet;
-  const pinInput = document.getElementById('pinInput');
-  document.getElementById('showPinToggle').addEventListener('change', (e) => {
-    pinInput.type = e.target.checked ? 'text' : 'password';
-  });
-  const tryLogin = () => {
-    const val = pinInput.value.trim();
-    if(val === getTodayPassword()){ openOrgPanel(); }
-    else { document.getElementById('pinError').style.display = 'block'; }
+  const emailInput = document.getElementById('orgEmail');
+  const pwInput = document.getElementById('orgPassword');
+  const tryLogin = async () => {
+    const errEl = document.getElementById('pinError');
+    errEl.style.display = 'none';
+    const goBtn = document.getElementById('pinGo');
+    goBtn.disabled = true; goBtn.textContent = 'Signing in…';
+    try{
+      await auth.signInWithEmailAndPassword(emailInput.value.trim(), pwInput.value);
+      openOrgPanel();
+    }catch(e){
+      errEl.textContent = 'Sign-in failed. Check your email and password.';
+      errEl.style.display = 'block';
+      goBtn.disabled = false; goBtn.textContent = 'Sign In';
+    }
   };
   document.getElementById('pinGo').onclick = tryLogin;
-  pinInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') tryLogin(); });
-  pinInput.focus();
+  pwInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') tryLogin(); });
+  emailInput.focus();
 }
 
 async function openOrgPanel(){
-  const seatsRes = await window.storage.get('seats-status', true).catch(() => null);
-  if(seatsRes && seatsRes.value) seats = normalizeSeats(JSON.parse(seatsRes.value));
-
-  await loadEventInfo();
+  try{
+    seats = await getFreshSeats();
+    const infoSnap = await db.ref('event-info').once('value');
+    applyIncomingEventInfo(infoSnap.exists() ? infoSnap.val() : null);
+  }catch(e){ console.error(e); }
 
   const booked = seats.map((s,i) => ({...s, seatNum:i+1})).filter(s => s.status === 'booked');
 
@@ -674,11 +713,16 @@ async function openOrgPanel(){
         <p class="sub">${booked.length} of ${TOTAL_SEATS} seats booked · ${money(booked.length * PRICE * (1+TAX_RATE))} collected incl. tax</p>
         <div id="orgRows">${rowsHtml}</div>
         <button class="ghost" id="resetAllBtn" style="margin-top:10px; border-color:var(--accent-rose); color:var(--accent-rose);">Reset ALL Seats to AVAILABLE</button>
-        <p class="note">Note: buyer names, contact, email and payment refs are stored in shared storage for this page, so treat this link as organizer-only — don't post it publicly.</p>
+        <button class="ghost" id="signOutBtn" style="margin-top:8px;">Sign Out</button>
+        <p class="note">Note: buyer names, contact, email and payment refs are visible here, so treat this link as organizer-only — don't post it publicly.</p>
       </div>
     </div>
   `;
   document.getElementById('closeX').onclick = closeSheet;
+  document.getElementById('signOutBtn').onclick = async () => {
+    await auth.signOut();
+    closeSheet();
+  };
   document.getElementById('saveInfoBtn').onclick = async () => {
     const movie = document.getElementById('movieInput').value.trim();
     const showTiming = document.getElementById('timingInput').value.trim();
@@ -691,7 +735,7 @@ async function openOrgPanel(){
     eventInfo = { movie, showTiming, contactEmail, instagram, price, upiId };
     PRICE = price;
     UPI_ID = upiId;
-    await window.storage.set('event-info', JSON.stringify(eventInfo), true);
+    await db.ref('event-info').set(eventInfo);
     renderEventInfo();
     updateCta();
     openOrgPanel();
@@ -699,7 +743,7 @@ async function openOrgPanel(){
   document.getElementById('resetAllBtn').onclick = async () => {
     if(!confirm('Reset all ' + TOTAL_SEATS + ' seats to available? This clears every booking.')) return;
     const fresh = Array.from({length: TOTAL_SEATS}, blankSeat);
-    await window.storage.set('seats-status', JSON.stringify(fresh), true);
+    await db.ref('seats-status').set(seatsArrayToKeyed(fresh));
     seats = fresh;
     renderSeats(); updateCta();
     openOrgPanel();
@@ -715,12 +759,7 @@ async function openOrgPanel(){
 
 async function releaseSeat(seatNum){
   try{
-    const res = await window.storage.get('seats-status', true);
-    const current = normalizeSeats(res && res.value ? JSON.parse(res.value) : seats);
-    current[seatNum - 1] = blankSeat();
-    await window.storage.set('seats-status', JSON.stringify(current), true);
-    seats = current;
-    renderSeats(); updateCta();
+    await db.ref('seats-status/' + seatNum).set(blankSeat());
   }catch(e){ console.error(e); }
 }
 </script>
