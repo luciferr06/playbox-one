@@ -62,6 +62,20 @@
     border-top:1px dashed var(--border-soft);
   }
 
+  .show-picker{ margin:14px 0 4px; }
+  .picker-label{ font-size:10px; letter-spacing:.1em; text-transform:uppercase; color:var(--text-muted); margin:0 0 6px; }
+  .day-tabs, .show-tabs{ display:flex; gap:6px; overflow-x:auto; padding-bottom:4px; }
+  .day-tabs::-webkit-scrollbar, .show-tabs::-webkit-scrollbar{ display:none; }
+  .day-tab, .show-tab{
+    flex-shrink:0; padding:8px 12px; border-radius:8px; border:1px solid var(--border-soft);
+    background:transparent; color:var(--text-muted); font-family:'Inter',sans-serif; font-size:12px;
+    cursor:pointer; white-space:nowrap;
+  }
+  .day-tab.active, .show-tab.active{
+    background:var(--accent-amber); border-color:var(--accent-amber); color:#111111; font-weight:700;
+  }
+  .show-tabs{ margin-top:8px; }
+
   .counter-row{ display:flex; align-items:baseline; justify-content:space-between; margin-bottom:16px; }
   .counter{ font-family:'JetBrains Mono',monospace; font-size:13px; color:var(--text-muted); }
   .counter b{color:var(--accent-amber); font-size:16px;}
@@ -117,8 +131,8 @@
     width:100%; padding:12px; margin-top:8px; border:1px solid var(--border-soft); border-radius:10px;
     background:transparent; color:var(--text-muted); font-family:'Inter',sans-serif; font-size:13px; cursor:pointer;
   }
-  .footer-link{ text-align:center; margin-top:14px; }
-  .footer-link button{
+  .footer-links{ display:flex; justify-content:center; gap:16px; margin-top:14px; }
+  .footer-links button{
     background:none; border:none; color:var(--text-muted); font-size:11px;
     text-decoration:underline; cursor:pointer; font-family:'Inter',sans-serif;
   }
@@ -164,9 +178,26 @@
 
   .qr-box{ text-align:center; background:#F2EDE4; border-radius:10px; padding:14px; margin:14px 0; display:flex; align-items:center; justify-content:center; }
   .qr-box canvas, .qr-box img{ width:170px; height:170px; display:block; margin:0 auto; }
-  .upi-id{
-    font-family:'JetBrains Mono',monospace; text-align:center; font-size:14px;
-    background:#151822; border:1px dashed var(--border-soft); border-radius:8px; padding:10px; margin-bottom:4px;
+  .upi-app-row{ display:flex; gap:8px; justify-content:center; flex-wrap:wrap; margin:14px 0; }
+  .upi-app-btn{
+    display:flex; flex-direction:column; align-items:center; gap:5px;
+    background:none; border:none; cursor:pointer; font-family:'Inter',sans-serif;
+    color:var(--text-cream); font-size:10px; width:56px;
+  }
+  .upi-app-btn .badge{
+    width:44px; height:44px; border-radius:12px; display:flex; align-items:center; justify-content:center;
+    color:#fff; font-weight:700; font-size:13px; letter-spacing:-.02em;
+  }
+  .pay-id-row{
+    display:flex; align-items:center; justify-content:space-between; gap:8px;
+    font-family:'JetBrains Mono',monospace; font-size:13px;
+    background:#151822; border:1px dashed var(--border-soft); border-radius:8px;
+    padding:10px 12px; margin-bottom:8px;
+  }
+  .pay-id-row button{
+    background:none; border:1px solid var(--border-soft); border-radius:6px;
+    color:var(--text-muted); font-size:10px; padding:5px 8px; cursor:pointer;
+    font-family:'Inter',sans-serif; flex-shrink:0;
   }
 
   .success .icon{
@@ -195,6 +226,12 @@
     cursor:pointer; font-weight:600; background:var(--accent-rose-dim); color:var(--accent-rose);
   }
   .empty-state{ color:var(--text-muted); font-size:13px; text-align:center; padding:12px 0; }
+  .ticket-match{
+    border:1px solid var(--border-soft); border-radius:10px; padding:12px; margin-bottom:10px;
+  }
+  .ticket-match .top{ display:flex; justify-content:space-between; font-size:13px; margin-bottom:4px; }
+  .ticket-match .top b{ color:var(--accent-gold); }
+  .ticket-match .sub{ font-size:12px; color:var(--text-muted); margin-bottom:8px; line-height:1.6; }
 </style>
 </head>
 <body>
@@ -213,6 +250,13 @@
 
     <div class="meta"><span id="movieSpan">Movie: —</span></div>
     <div class="meta"><span>Ticket price: <b id="priceDisplay">₹1</b></span></div>
+
+    <div class="show-picker">
+      <p class="picker-label">Choose a day</p>
+      <div class="day-tabs" id="dayTabs"></div>
+      <p class="picker-label" style="margin-top:10px;">Choose a show</p>
+      <div class="show-tabs" id="showTabs"></div>
+    </div>
 
     <div class="counter-row">
       <span class="counter"><span class="live-dot"></span><b id="availCount">--</b> seats left</span>
@@ -235,7 +279,8 @@
       <button class="primary" id="bookBtn" disabled>Select Seat</button>
     </div>
 
-    <div class="footer-link">
+    <div class="footer-links">
+      <button id="viewTicketLink">View My Ticket</button>
       <button id="orgLink">Organizer Panel</button>
     </div>
   </div>
@@ -272,10 +317,14 @@ const auth = firebase.auth();
 const ROWS = 6;
 const PER_ROW = 4;
 const TOTAL_SEATS = ROWS * PER_ROW;
+const NUM_DAYS = 5;
+const NUM_SHOWS_PER_DAY = 3;
 let PRICE = 1;
 const TAX_RATE = 0.05;
 let UPI_ID = 'luciferr.06@ybl';
+let UPI_PHONE = '';
 const UPI_PAYEE_NAME = 'Playbox';
+
 function blankSeat(){ return { status:'available', name:'', contact:'', email:'', ref:'', time:'' }; }
 function seatsArrayToKeyed(arr){
   const obj = {};
@@ -302,10 +351,42 @@ function toTitleCase(str){
   return str.trim().toLowerCase().replace(/\b\w/g, ch => ch.toUpperCase());
 }
 function money(n){ return '₹' + n.toFixed(2).replace(/\.00$/, ''); }
+function normalizePhone(p){ return (p || '').replace(/\D/g, '').slice(-10); }
 
+/* ---------- Date / show helpers ---------- */
+
+function dateForOffset(offset){
+  const d = new Date();
+  d.setDate(d.getDate() + offset);
+  return d;
+}
+function dateKey(d){
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth()+1).padStart(2,'0');
+  const dd = String(d.getDate()).padStart(2,'0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+function dayLabel(offset, d){
+  if(offset === 0) return 'Today';
+  if(offset === 1) return 'Tomorrow';
+  return d.toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short' });
+}
+function fullDateLabel(d){
+  return d.toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short' });
+}
+function showKeyFor(dayOffset, showIndex){
+  return dateKey(dateForOffset(dayOffset)) + '_' + showIndex;
+}
+
+let selectedDayOffset = 0;
+let selectedShowIndex = 0;
 let seats = Array.from({length: TOTAL_SEATS}, blankSeat);
 let selectedSeats = new Set();
-let eventInfo = { movie:'', showTiming:'', contactEmail:'luciferr.06@icloud.com', instagram:'@playbox.one', price:1, upiId:'luciferr.06@ybl' };
+let eventInfo = {
+  movie:'', showTimes:['10:00 AM','2:00 PM','6:00 PM'],
+  contactEmail:'luciferr.06@icloud.com', instagram:'@playbox.one',
+  price:1, upiId:'luciferr.06@ybl', upiPhone:''
+};
 
 const rowsEl = document.getElementById('rows');
 const bookBtn = document.getElementById('bookBtn');
@@ -313,18 +394,48 @@ const availCountEl = document.getElementById('availCount');
 const lastUpdatedEl = document.getElementById('lastUpdated');
 const modalRoot = document.getElementById('modalRoot');
 const selectionSummaryEl = document.getElementById('selectionSummary');
+const dayTabsEl = document.getElementById('dayTabs');
+const showTabsEl = document.getElementById('showTabs');
+
+function renderDayShowTabs(){
+  dayTabsEl.innerHTML = '';
+  for(let i=0; i<NUM_DAYS; i++){
+    const d = dateForOffset(i);
+    const btn = document.createElement('button');
+    btn.className = 'day-tab' + (i === selectedDayOffset ? ' active' : '');
+    btn.textContent = dayLabel(i, d);
+    btn.addEventListener('click', () => {
+      if(selectedDayOffset === i) return;
+      selectedDayOffset = i;
+      switchShow();
+    });
+    dayTabsEl.appendChild(btn);
+  }
+  showTabsEl.innerHTML = '';
+  for(let i=0; i<NUM_SHOWS_PER_DAY; i++){
+    const btn = document.createElement('button');
+    btn.className = 'show-tab' + (i === selectedShowIndex ? ' active' : '');
+    btn.textContent = eventInfo.showTimes[i] || ('Show ' + (i+1));
+    btn.addEventListener('click', () => {
+      if(selectedShowIndex === i) return;
+      selectedShowIndex = i;
+      switchShow();
+    });
+    showTabsEl.appendChild(btn);
+  }
+}
 
 function renderEventDate(){
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short' });
-  document.getElementById('eventDate').textContent = dateStr;
+  const d = dateForOffset(selectedDayOffset);
+  document.getElementById('eventDate').textContent = fullDateLabel(d);
 }
-renderEventDate();
 
 function renderEventInfo(){
   document.getElementById('movieSpan').textContent = 'Movie: ' + (eventInfo.movie ? eventInfo.movie : '—');
-  document.getElementById('showTimingSpan').textContent = 'Show Timing: ' + (eventInfo.showTiming ? eventInfo.showTiming : '—');
+  document.getElementById('showTimingSpan').textContent = 'Show Timing: ' + (eventInfo.showTimes[selectedShowIndex] || '—');
   document.getElementById('priceDisplay').textContent = '₹' + PRICE;
+  renderEventDate();
+  renderDayShowTabs();
 
   const emailIcon = document.getElementById('contactEmailIcon');
   if(eventInfo.contactEmail){
@@ -405,15 +516,17 @@ function applyIncomingEventInfo(stored){
   if(stored){
     eventInfo = {
       movie: stored.movie || eventInfo.movie,
-      showTiming: stored.showTiming || eventInfo.showTiming,
+      showTimes: (Array.isArray(stored.showTimes) && stored.showTimes.length === 3) ? stored.showTimes : eventInfo.showTimes,
       contactEmail: stored.contactEmail || eventInfo.contactEmail,
       instagram: stored.instagram || eventInfo.instagram,
       price: (stored.price !== undefined && stored.price !== null && stored.price !== '') ? Number(stored.price) : eventInfo.price,
-      upiId: stored.upiId || eventInfo.upiId
+      upiId: stored.upiId || eventInfo.upiId,
+      upiPhone: stored.upiPhone !== undefined ? stored.upiPhone : eventInfo.upiPhone
     };
   }
   PRICE = eventInfo.price;
   UPI_ID = eventInfo.upiId;
+  UPI_PHONE = eventInfo.upiPhone;
   renderEventInfo();
   updateCta();
 }
@@ -436,26 +549,37 @@ function applyIncomingSeats(raw){
   lastUpdatedEl.textContent = 'updated ' + new Date().toLocaleTimeString([], {hour:'2-digit', minute:'2-digit'});
 }
 
-function initSeatsListener(){
-  db.ref('seats-status').on('value', (snapshot) => {
+let currentSeatsRef = null;
+function attachSeatsListener(showKey){
+  if(currentSeatsRef) currentSeatsRef.off();
+  lastUpdatedEl.textContent = 'syncing…';
+  currentSeatsRef = db.ref('seats-status/' + showKey);
+  currentSeatsRef.on('value', (snapshot) => {
     if(snapshot.exists()){
       applyIncomingSeats(snapshot.val());
     } else {
-      db.ref('seats-status').set(seatsArrayToKeyed(seats));
-      applyIncomingSeats(seats);
+      const blank = Array.from({length: TOTAL_SEATS}, blankSeat);
+      currentSeatsRef.set(seatsArrayToKeyed(blank));
+      applyIncomingSeats(blank);
     }
   }, (err) => {
     console.error('seats listener error', err);
   });
 }
 
-async function getFreshSeats(){
-  const snapshot = await db.ref('seats-status').once('value');
-  return normalizeSeats(snapshot.exists() ? snapshot.val() : seats);
+function switchShow(){
+  selectedSeats.clear();
+  renderEventInfo();
+  attachSeatsListener(showKeyFor(selectedDayOffset, selectedShowIndex));
+}
+
+async function getFreshSeats(showKey){
+  const snapshot = await db.ref('seats-status/' + showKey).once('value');
+  return normalizeSeats(snapshot.exists() ? snapshot.val() : null);
 }
 
 initEventInfoListener();
-initSeatsListener();
+switchShow();
 
 bookBtn.addEventListener('click', () => {
   if(selectedSeats.size === 0) return;
@@ -463,6 +587,7 @@ bookBtn.addEventListener('click', () => {
 });
 
 document.getElementById('orgLink').addEventListener('click', openPinSheet);
+document.getElementById('viewTicketLink').addEventListener('click', openViewTicketSheet);
 
 function closeSheet(){ modalRoot.innerHTML = ''; }
 
@@ -471,25 +596,48 @@ function openDetailsSheet(){
   const subtotal = seatNums.length * PRICE;
   const tax = subtotal * TAX_RATE;
   const total = subtotal + tax;
-  const upiLink = `upi://pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent(UPI_PAYEE_NAME)}&am=${total.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Seats ' + seatNums.join(','))}`;
+  const txnNote = encodeURIComponent('Seats ' + seatNums.join(','));
+  const amt = total.toFixed(2);
+  const upiLink = `upi://pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent(UPI_PAYEE_NAME)}&am=${amt}&cu=INR&tn=${txnNote}`;
+
+  const appLinks = {
+    gpay: `tez://upi/pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent(UPI_PAYEE_NAME)}&am=${amt}&cu=INR&tn=${txnNote}`,
+    phonepe: `phonepe://pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent(UPI_PAYEE_NAME)}&am=${amt}&cu=INR&tn=${txnNote}`,
+    paytm: `paytmmp://pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent(UPI_PAYEE_NAME)}&am=${amt}&cu=INR&tn=${txnNote}`,
+    bhim: `bhim://pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent(UPI_PAYEE_NAME)}&am=${amt}&cu=INR&tn=${txnNote}`
+  };
   const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
 
-  const payButtonHtml = isIOS
-    ? `<p class="note" style="text-align:center; margin-top:0;">On iPhone, open GPay, PhonePe, or any UPI app and scan the code below to pay ${money(total)}. iOS doesn't support a universal "open app" link like Android does.</p>`
-    : `<button type="button" id="upiAppBtn" class="primary" style="display:block; text-align:center;">Pay ${money(total)} in UPI app</button>
-       <p class="note" style="text-align:center;">Tapping this opens your preferred UPI app (GPay, PhonePe, Paytm) with the amount filled in. On desktop, scan the code below instead.</p>`;
+  const genericBtnHtml = isIOS ? '' :
+    `<button type="button" id="upiAppBtn" class="primary" style="display:block; text-align:center; margin-top:4px;">Pay ${money(total)} with any UPI app</button>`;
 
   modalRoot.innerHTML = `
     <div class="overlay">
       <div class="sheet">
         <button class="close-x" id="closeX">✕ close</button>
         <h2>Book seat${seatNums.length>1?'s':''} ${seatNums.join(', ')}</h2>
-        <p class="sub">${seatNums.length} × ₹${PRICE} + 5% tax</p>
+        <p class="sub">${fullDateLabel(dateForOffset(selectedDayOffset))} · ${eventInfo.showTimes[selectedShowIndex]} · ${seatNums.length} × ₹${PRICE} + 5% tax</p>
 
-        ${payButtonHtml}
+        <div class="upi-app-row">
+          <button type="button" class="upi-app-btn" data-app="gpay"><span class="badge" style="background:#4285F4;">G</span>GPay</button>
+          <button type="button" class="upi-app-btn" data-app="phonepe"><span class="badge" style="background:#5F259F;">Pe</span>PhonePe</button>
+          <button type="button" class="upi-app-btn" data-app="paytm"><span class="badge" style="background:#00BAF2;">P</span>Paytm</button>
+          <button type="button" class="upi-app-btn" data-app="bhim"><span class="badge" style="background:#00A651;">B</span>BHIM</button>
+        </div>
+        <p class="note" style="text-align:center; margin-top:0;">Tap an app to open it directly with the amount filled in. If it doesn't open (app not installed), use the QR code or ID below instead.</p>
+        ${genericBtnHtml}
 
-        <div class="qr-box" id="qrBox"></div>
-        <div class="upi-id">${UPI_ID}</div>
+        <div class="qr-box" id="qrBox" style="margin-top:14px;"></div>
+
+        <div class="pay-id-row">
+          <span>${UPI_ID}</span>
+          <button type="button" data-copy="${UPI_ID}">Copy</button>
+        </div>
+        ${UPI_PHONE ? `
+        <div class="pay-id-row">
+          <span>${UPI_PHONE}</span>
+          <button type="button" data-copy="${UPI_PHONE}">Copy</button>
+        </div>` : ''}
 
         <div class="price-line"><span>Subtotal</span><span>${money(subtotal)}</span></div>
         <div class="price-line"><span>Tax (5%)</span><span>${money(tax)}</span></div>
@@ -518,6 +666,18 @@ function openDetailsSheet(){
   if(!isIOS){
     document.getElementById('upiAppBtn').onclick = () => { window.location.href = upiLink; };
   }
+  document.querySelectorAll('.upi-app-btn').forEach(btn => {
+    btn.addEventListener('click', () => { window.location.href = appLinks[btn.dataset.app]; });
+  });
+  document.querySelectorAll('[data-copy]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      navigator.clipboard.writeText(btn.dataset.copy).then(() => {
+        const old = btn.textContent;
+        btn.textContent = 'Copied';
+        setTimeout(() => { btn.textContent = old; }, 1500);
+      }).catch(() => {});
+    });
+  });
   try{
     new QRCode(document.getElementById('qrBox'), {
       text: upiLink, width:170, height:170,
@@ -555,6 +715,10 @@ function openDetailsSheet(){
 
 async function submitBooking(name, contact, email, ref){
   const seatNums = [...selectedSeats].map(i => i+1).sort((a,b)=>a-b);
+  const showKey = showKeyFor(selectedDayOffset, selectedShowIndex);
+  const dateLabel = fullDateLabel(dateForOffset(selectedDayOffset));
+  const timeLabel = eventInfo.showTimes[selectedShowIndex];
+  const movie = eventInfo.movie;
 
   modalRoot.innerHTML = `
     <div class="overlay">
@@ -568,7 +732,7 @@ async function submitBooking(name, contact, email, ref){
   await new Promise(r => setTimeout(r, 800));
 
   try{
-    const current = await getFreshSeats();
+    const current = await getFreshSeats(showKey);
     const taken = [...selectedSeats].filter(idx => current[idx].status !== 'available');
     if(taken.length > 0){
       showFailure('Seat(s) ' + taken.map(i=>i+1).join(', ') + ' were just taken by someone else. Pick different seats.');
@@ -577,14 +741,15 @@ async function submitBooking(name, contact, email, ref){
     }
     const time = new Date().toISOString();
     const updates = {};
+    const ticketCode = 'PB-' + seatNums.join('-') + '-' + Math.random().toString(36).slice(2,6).toUpperCase();
     selectedSeats.forEach(idx => {
-      const seatData = { status:'booked', name, contact, email, ref, time };
+      const seatData = { status:'booked', name, contact, email, ref, time, ticketCode, movie, dateLabel, timeLabel, showKey, seatNum: idx+1 };
       current[idx] = seatData;
       updates[(idx+1)] = seatData;
     });
-    await db.ref('seats-status').update(updates);
+    await db.ref('seats-status/' + showKey).update(updates);
     seats = current;
-    showBookedSuccess(name, seatNums);
+    showBookedSuccess(name, seatNums, ticketCode, dateLabel, timeLabel, movie);
     selectedSeats.clear();
     renderSeats(); updateCta();
   }catch(e){
@@ -608,18 +773,15 @@ function showFailure(msg){
   document.getElementById('okBtn').onclick = closeSheet;
 }
 
-function showBookedSuccess(name, seatNums){
-  const code = 'PB-' + seatNums.join('-') + '-' + Math.random().toString(36).slice(2,6).toUpperCase();
-  const now = new Date();
-  const dateStr = now.toLocaleDateString('en-IN', { weekday:'short', day:'numeric', month:'short' });
+function showBookedSuccess(name, seatNums, ticketCode, dateLabel, timeLabel, movie){
   modalRoot.innerHTML = `
     <div class="overlay">
       <div class="sheet success">
         <div class="icon">✓</div>
         <h2>You're in, ${toTitleCase(name).split(' ')[0]}</h2>
-        <p class="sub">Seat${seatNums.length>1?'s':''} ${seatNums.join(', ')} · Playbox · ${dateStr}</p>
-        <div class="ticket-code">${code}</div>
-        <p class="note">Your seat(s) are confirmed and booked. Keep this code for entry.</p>
+        <p class="sub">Seat${seatNums.length>1?'s':''} ${seatNums.join(', ')} · ${movie ? movie + ' · ' : ''}${dateLabel} · ${timeLabel}</p>
+        <div class="ticket-code">${ticketCode}</div>
+        <p class="note">Your seat(s) are confirmed and booked. Use "View My Ticket" anytime with your phone number to look this up and download it.</p>
         <div class="cta-bar" style="border-top:none;">
           <button class="primary" id="doneBtn">Done</button>
         </div>
@@ -627,6 +789,129 @@ function showBookedSuccess(name, seatNums){
     </div>
   `;
   document.getElementById('doneBtn').onclick = closeSheet;
+}
+
+/* ---------- View My Ticket ---------- */
+
+function openViewTicketSheet(){
+  modalRoot.innerHTML = `
+    <div class="overlay">
+      <div class="sheet">
+        <button class="close-x" id="closeX">✕ close</button>
+        <h2>View My Ticket</h2>
+        <p class="sub">Enter the phone number you booked with.</p>
+        <label for="lookupPhone">Phone number</label>
+        <input id="lookupPhone" type="tel" placeholder="+91 98765 43210" />
+        <div id="lookupError" class="error" style="display:none;"></div>
+        <div class="cta-bar" style="border-top:none; margin-top:16px;">
+          <button class="primary" id="lookupBtn">Find My Tickets</button>
+        </div>
+        <div id="lookupResults"></div>
+      </div>
+    </div>
+  `;
+  document.getElementById('closeX').onclick = closeSheet;
+  const phoneInput = document.getElementById('lookupPhone');
+  const doLookup = async () => {
+    const phone = normalizePhone(phoneInput.value);
+    const errEl = document.getElementById('lookupError');
+    const resultsEl = document.getElementById('lookupResults');
+    if(phone.length !== 10){
+      errEl.textContent = 'Enter a valid 10-digit phone number.';
+      errEl.style.display = 'block';
+      resultsEl.innerHTML = '';
+      return;
+    }
+    errEl.style.display = 'none';
+    resultsEl.innerHTML = '<div class="spinner"></div>';
+    try{
+      const snap = await db.ref('seats-status').once('value');
+      const allShows = snap.exists() ? snap.val() : {};
+      const matches = [];
+      Object.keys(allShows).forEach(showKey => {
+        const showSeats = allShows[showKey] || {};
+        Object.keys(showSeats).forEach(seatKey => {
+          const s = showSeats[seatKey];
+          if(s && s.status === 'booked' && normalizePhone(s.contact) === phone){
+            matches.push(s);
+          }
+        });
+      });
+      if(matches.length === 0){
+        resultsEl.innerHTML = '<p class="empty-state">No bookings found for that number.</p>';
+        return;
+      }
+      matches.sort((a,b) => (a.showKey||'').localeCompare(b.showKey||''));
+      resultsEl.innerHTML = matches.map((m, i) => `
+        <div class="ticket-match">
+          <div class="top"><b>Seat ${m.seatNum}</b><span>${m.dateLabel || ''}</span></div>
+          <div class="sub">${m.movie ? m.movie + '<br>' : ''}${m.timeLabel || ''}<br>Code: ${m.ticketCode || '—'}</div>
+          <button class="primary" data-idx="${i}" style="margin-top:0;">Download Ticket (JPG)</button>
+        </div>
+      `).join('');
+      resultsEl.querySelectorAll('button[data-idx]').forEach(btn => {
+        btn.addEventListener('click', () => downloadTicketImage(matches[parseInt(btn.dataset.idx,10)]));
+      });
+    }catch(e){
+      console.error(e);
+      resultsEl.innerHTML = '<p class="empty-state">Something went wrong looking that up. Try again.</p>';
+    }
+  };
+  document.getElementById('lookupBtn').onclick = doLookup;
+  phoneInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') doLookup(); });
+  phoneInput.focus();
+}
+
+function downloadTicketImage(match){
+  const canvas = document.createElement('canvas');
+  canvas.width = 640; canvas.height = 380;
+  const ctx = canvas.getContext('2d');
+  ctx.fillStyle = '#0D0D0D'; ctx.fillRect(0,0,640,380);
+  ctx.strokeStyle = '#2E2E2E'; ctx.lineWidth = 2; ctx.strokeRect(10,10,620,360);
+
+  ctx.fillStyle = '#F5F5F5';
+  ctx.font = 'bold 34px sans-serif';
+  ctx.fillText('PLAYBOX', 32, 62);
+  ctx.fillStyle = '#8A8A8A';
+  ctx.font = '14px sans-serif';
+  ctx.fillText('Kalinga Nagar, Bhubaneswar', 32, 84);
+
+  ctx.strokeStyle = '#2E2E2E';
+  ctx.setLineDash([6,6]);
+  ctx.beginPath(); ctx.moveTo(32,102); ctx.lineTo(608,102); ctx.stroke();
+  ctx.setLineDash([]);
+
+  const rows = [
+    ['Movie', match.movie || '—'],
+    ['Date', match.dateLabel || '—'],
+    ['Show Time', match.timeLabel || '—'],
+    ['Seat', String(match.seatNum)],
+    ['Name', toTitleCase(match.name) || '—']
+  ];
+  let y = 140;
+  rows.forEach(([label, val]) => {
+    ctx.fillStyle = '#8A8A8A'; ctx.font = '12px sans-serif';
+    ctx.fillText(label.toUpperCase(), 32, y);
+    ctx.fillStyle = '#F5F5F5'; ctx.font = 'bold 20px sans-serif';
+    ctx.fillText(String(val), 32, y + 24);
+    y += 46;
+  });
+
+  ctx.fillStyle = '#CFCFCF';
+  ctx.font = '14px monospace';
+  ctx.fillText('Code: ' + (match.ticketCode || '—'), 32, 358);
+
+  canvas.toBlob((blob) => {
+    if(!blob) return;
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'playbox-ticket-seat' + match.seatNum + '.jpg';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    setTimeout(() => URL.revokeObjectURL(url), 3000);
+  }, 'image/jpeg', 0.92);
 }
 
 /* ---------- Organizer panel ---------- */
@@ -672,8 +957,9 @@ function openPinSheet(){
 }
 
 async function openOrgPanel(){
+  const showKey = showKeyFor(selectedDayOffset, selectedShowIndex);
   try{
-    seats = await getFreshSeats();
+    seats = await getFreshSeats(showKey);
     const infoSnap = await db.ref('event-info').once('value');
     applyIncomingEventInfo(infoSnap.exists() ? infoSnap.val() : null);
   }catch(e){ console.error(e); }
@@ -682,7 +968,7 @@ async function openOrgPanel(){
 
   let rowsHtml = '';
   if(booked.length === 0){
-    rowsHtml = '<p class="empty-state">No seats booked yet.</p>';
+    rowsHtml = '<p class="empty-state">No seats booked yet for this show.</p>';
   } else {
     rowsHtml = booked.map(s => `
       <div class="org-row">
@@ -700,12 +986,17 @@ async function openOrgPanel(){
       <div class="sheet">
         <button class="close-x" id="closeX">✕ close</button>
         <h2>Organizer Panel</h2>
+        <p class="sub">Managing: ${fullDateLabel(dateForOffset(selectedDayOffset))} · ${eventInfo.showTimes[selectedShowIndex]} — pick a different day/show on the main page before opening this panel to manage another show.</p>
 
         <div class="org-section">
           <label for="movieInput">Movie</label>
           <input id="movieInput" type="text" placeholder="Enter movie name" value="${eventInfo.movie || ''}" />
-          <label for="timingInput">Show timing</label>
-          <input id="timingInput" type="text" placeholder="e.g. 7:00 PM" value="${eventInfo.showTiming || ''}" />
+          <label for="show1Input">Show 1 timing</label>
+          <input id="show1Input" type="text" placeholder="e.g. 10:00 AM" value="${eventInfo.showTimes[0] || ''}" />
+          <label for="show2Input">Show 2 timing</label>
+          <input id="show2Input" type="text" placeholder="e.g. 2:00 PM" value="${eventInfo.showTimes[1] || ''}" />
+          <label for="show3Input">Show 3 timing</label>
+          <input id="show3Input" type="text" placeholder="e.g. 6:00 PM" value="${eventInfo.showTimes[2] || ''}" />
           <label for="contactEmailInput">Contact email</label>
           <input id="contactEmailInput" type="email" placeholder="you@example.com" value="${eventInfo.contactEmail || ''}" />
           <label for="instagramInput">Instagram</label>
@@ -714,12 +1005,14 @@ async function openOrgPanel(){
           <input id="priceInput" type="number" min="0" step="0.01" placeholder="1" value="${PRICE}" />
           <label for="upiIdInput">UPI ID</label>
           <input id="upiIdInput" type="text" placeholder="yourname@bank" value="${UPI_ID}" />
+          <label for="upiPhoneInput">Phone number (alt. UPI payment method)</label>
+          <input id="upiPhoneInput" type="tel" placeholder="+91 98765 43210" value="${UPI_PHONE}" />
           <button class="primary" id="saveInfoBtn" style="margin-top:12px;">Save Details</button>
         </div>
 
-        <p class="sub">${booked.length} of ${TOTAL_SEATS} seats booked · ${money(booked.length * PRICE * (1+TAX_RATE))} collected incl. tax</p>
+        <p class="sub">${booked.length} of ${TOTAL_SEATS} seats booked (this show) · ${money(booked.length * PRICE * (1+TAX_RATE))} collected incl. tax</p>
         <div id="orgRows">${rowsHtml}</div>
-        <button class="ghost" id="resetAllBtn" style="margin-top:10px; border-color:var(--accent-rose); color:var(--accent-rose);">Reset ALL Seats to AVAILABLE</button>
+        <button class="ghost" id="resetAllBtn" style="margin-top:10px; border-color:var(--accent-rose); color:var(--accent-rose);">Reset ALL Seats to AVAILABLE (this show)</button>
         <button class="ghost" id="signOutBtn" style="margin-top:8px;">Sign Out</button>
         <p class="note">Note: buyer names, contact, email and payment refs are visible here, so treat this link as organizer-only — don't post it publicly.</p>
       </div>
@@ -732,25 +1025,31 @@ async function openOrgPanel(){
   };
   document.getElementById('saveInfoBtn').onclick = async () => {
     const movie = document.getElementById('movieInput').value.trim();
-    const showTiming = document.getElementById('timingInput').value.trim();
+    const showTimes = [
+      document.getElementById('show1Input').value.trim() || eventInfo.showTimes[0],
+      document.getElementById('show2Input').value.trim() || eventInfo.showTimes[1],
+      document.getElementById('show3Input').value.trim() || eventInfo.showTimes[2]
+    ];
     const contactEmail = document.getElementById('contactEmailInput').value.trim();
     const instagram = document.getElementById('instagramInput').value.trim();
     const priceVal = parseFloat(document.getElementById('priceInput').value);
     const upiIdVal = document.getElementById('upiIdInput').value.trim();
+    const upiPhone = document.getElementById('upiPhoneInput').value.trim();
     const price = (!isNaN(priceVal) && priceVal >= 0) ? priceVal : PRICE;
     const upiId = upiIdVal || UPI_ID;
-    eventInfo = { movie, showTiming, contactEmail, instagram, price, upiId };
+    eventInfo = { movie, showTimes, contactEmail, instagram, price, upiId, upiPhone };
     PRICE = price;
     UPI_ID = upiId;
+    UPI_PHONE = upiPhone;
     await db.ref('event-info').set(eventInfo);
     renderEventInfo();
     updateCta();
     openOrgPanel();
   };
   document.getElementById('resetAllBtn').onclick = async () => {
-    if(!confirm('Reset all ' + TOTAL_SEATS + ' seats to available? This clears every booking.')) return;
+    if(!confirm('Reset all ' + TOTAL_SEATS + ' seats to available for this show only? This clears every booking for ' + fullDateLabel(dateForOffset(selectedDayOffset)) + ' · ' + eventInfo.showTimes[selectedShowIndex] + '.')) return;
     const fresh = Array.from({length: TOTAL_SEATS}, blankSeat);
-    await db.ref('seats-status').set(seatsArrayToKeyed(fresh));
+    await db.ref('seats-status/' + showKey).set(seatsArrayToKeyed(fresh));
     seats = fresh;
     renderSeats(); updateCta();
     openOrgPanel();
@@ -758,15 +1057,15 @@ async function openOrgPanel(){
   document.querySelectorAll('#orgRows button').forEach(btn => {
     btn.addEventListener('click', async () => {
       const seatNum = parseInt(btn.dataset.seat, 10);
-      await releaseSeat(seatNum);
+      await releaseSeat(showKey, seatNum);
       openOrgPanel();
     });
   });
 }
 
-async function releaseSeat(seatNum){
+async function releaseSeat(showKey, seatNum){
   try{
-    await db.ref('seats-status/' + seatNum).set(blankSeat());
+    await db.ref('seats-status/' + showKey + '/' + seatNum).set(blankSeat());
   }catch(e){ console.error(e); }
 }
 </script>
