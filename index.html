@@ -209,7 +209,7 @@
     <div class="perforation"></div>
 
     <div class="meta"><span id="movieSpan">Movie: —</span></div>
-    <div class="meta"><span>Ticket price: <b>₹1</b></span></div>
+    <div class="meta"><span>Ticket price: <b id="priceDisplay">₹1</b></span></div>
 
     <div class="counter-row">
       <span class="counter"><span class="live-dot"></span><b id="availCount">--</b> seats left</span>
@@ -256,11 +256,17 @@
 const ROWS = 6;
 const PER_ROW = 4;
 const TOTAL_SEATS = ROWS * PER_ROW;
-const PRICE = 1;
+let PRICE = 1;
 const TAX_RATE = 0.05;
-const UPI_ID = 'luciferr.06@ybl';
+let UPI_ID = 'luciferr.06@ybl';
 const UPI_PAYEE_NAME = 'Playbox';
-const ORG_PIN = '1212';
+function getTodayPassword(){
+  const now = new Date();
+  const dd = String(now.getDate()).padStart(2,'0');
+  const mm = String(now.getMonth()+1).padStart(2,'0');
+  const yyyy = now.getFullYear();
+  return 'Playbox' + dd + mm + yyyy;
+}
 
 function blankSeat(){ return { status:'available', name:'', contact:'', email:'', ref:'', time:'' }; }
 function normalizeSeats(arr){
@@ -280,7 +286,7 @@ function money(n){ return '₹' + n.toFixed(2).replace(/\.00$/, ''); }
 
 let seats = Array.from({length: TOTAL_SEATS}, blankSeat);
 let selectedSeats = new Set();
-let eventInfo = { movie:'', showTiming:'', contactEmail:'luciferr.06@icloud.com', instagram:'@playbox.one' };
+let eventInfo = { movie:'', showTiming:'', contactEmail:'luciferr.06@icloud.com', instagram:'@playbox.one', price:1, upiId:'luciferr.06@ybl' };
 
 const rowsEl = document.getElementById('rows');
 const bookBtn = document.getElementById('bookBtn');
@@ -299,6 +305,7 @@ renderEventDate();
 function renderEventInfo(){
   document.getElementById('movieSpan').textContent = 'Movie: ' + (eventInfo.movie ? eventInfo.movie : '—');
   document.getElementById('showTimingSpan').textContent = 'Show Timing: ' + (eventInfo.showTiming ? eventInfo.showTiming : '—');
+  document.getElementById('priceDisplay').textContent = '₹' + PRICE;
 
   const emailIcon = document.getElementById('contactEmailIcon');
   if(eventInfo.contactEmail){
@@ -384,10 +391,14 @@ async function loadEventInfo(){
         movie: stored.movie || eventInfo.movie,
         showTiming: stored.showTiming || eventInfo.showTiming,
         contactEmail: stored.contactEmail || eventInfo.contactEmail,
-        instagram: stored.instagram || eventInfo.instagram
+        instagram: stored.instagram || eventInfo.instagram,
+        price: (stored.price !== undefined && stored.price !== null && stored.price !== '') ? Number(stored.price) : eventInfo.price,
+        upiId: stored.upiId || eventInfo.upiId
       };
     }
   }catch(e){ /* not set yet */ }
+  PRICE = eventInfo.price;
+  UPI_ID = eventInfo.upiId;
   renderEventInfo();
 }
 
@@ -587,10 +598,13 @@ function openPinSheet(){
       <div class="sheet">
         <button class="close-x" id="closeX">✕ close</button>
         <h2>Organizer Panel</h2>
-        <p class="sub">Enter your PIN to manage the event.</p>
-        <label for="pinInput">PIN</label>
-        <input id="pinInput" type="password" inputmode="numeric" maxlength="4" placeholder="••••" />
-        <div id="pinError" class="error" style="display:none;">Incorrect PIN.</div>
+        <p class="sub">Enter today's password to manage the event.</p>
+        <label for="pinInput">Password</label>
+        <input id="pinInput" type="password" placeholder="••••••••" autocomplete="off" />
+        <label style="display:flex; align-items:center; gap:6px; text-transform:none; font-size:12px; margin-top:8px;">
+          <input type="checkbox" id="showPinToggle" style="width:auto;" /> Show password
+        </label>
+        <div id="pinError" class="error" style="display:none;">Incorrect password.</div>
         <div class="cta-bar" style="border-top:none; margin-top:16px;">
           <button class="primary" id="pinGo">Enter</button>
         </div>
@@ -598,19 +612,25 @@ function openPinSheet(){
     </div>
   `;
   document.getElementById('closeX').onclick = closeSheet;
-  document.getElementById('pinGo').onclick = () => {
-    const val = document.getElementById('pinInput').value.trim();
-    if(val === ORG_PIN){ openOrgPanel(); }
+  const pinInput = document.getElementById('pinInput');
+  document.getElementById('showPinToggle').addEventListener('change', (e) => {
+    pinInput.type = e.target.checked ? 'text' : 'password';
+  });
+  const tryLogin = () => {
+    const val = pinInput.value.trim();
+    if(val === getTodayPassword()){ openOrgPanel(); }
     else { document.getElementById('pinError').style.display = 'block'; }
   };
+  document.getElementById('pinGo').onclick = tryLogin;
+  pinInput.addEventListener('keydown', (e) => { if(e.key === 'Enter') tryLogin(); });
+  pinInput.focus();
 }
 
 async function openOrgPanel(){
   const seatsRes = await window.storage.get('seats-status', true).catch(() => null);
   if(seatsRes && seatsRes.value) seats = normalizeSeats(JSON.parse(seatsRes.value));
 
-  const infoRes = await window.storage.get('event-info', true).catch(() => null);
-  if(infoRes && infoRes.value) eventInfo = JSON.parse(infoRes.value);
+  await loadEventInfo();
 
   const booked = seats.map((s,i) => ({...s, seatNum:i+1})).filter(s => s.status === 'booked');
 
@@ -644,6 +664,10 @@ async function openOrgPanel(){
           <input id="contactEmailInput" type="email" placeholder="you@example.com" value="${eventInfo.contactEmail || ''}" />
           <label for="instagramInput">Instagram</label>
           <input id="instagramInput" type="text" placeholder="@yourhandle" value="${eventInfo.instagram || ''}" />
+          <label for="priceInput">Ticket price (₹)</label>
+          <input id="priceInput" type="number" min="0" step="0.01" placeholder="1" value="${PRICE}" />
+          <label for="upiIdInput">UPI ID</label>
+          <input id="upiIdInput" type="text" placeholder="yourname@bank" value="${UPI_ID}" />
           <button class="primary" id="saveInfoBtn" style="margin-top:12px;">Save Details</button>
         </div>
 
@@ -660,9 +684,16 @@ async function openOrgPanel(){
     const showTiming = document.getElementById('timingInput').value.trim();
     const contactEmail = document.getElementById('contactEmailInput').value.trim();
     const instagram = document.getElementById('instagramInput').value.trim();
-    eventInfo = { movie, showTiming, contactEmail, instagram };
+    const priceVal = parseFloat(document.getElementById('priceInput').value);
+    const upiIdVal = document.getElementById('upiIdInput').value.trim();
+    const price = (!isNaN(priceVal) && priceVal >= 0) ? priceVal : PRICE;
+    const upiId = upiIdVal || UPI_ID;
+    eventInfo = { movie, showTiming, contactEmail, instagram, price, upiId };
+    PRICE = price;
+    UPI_ID = upiId;
     await window.storage.set('event-info', JSON.stringify(eventInfo), true);
     renderEventInfo();
+    updateCta();
     openOrgPanel();
   };
   document.getElementById('resetAllBtn').onclick = async () => {
