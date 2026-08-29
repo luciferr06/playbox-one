@@ -472,6 +472,12 @@ function openDetailsSheet(){
   const tax = subtotal * TAX_RATE;
   const total = subtotal + tax;
   const upiLink = `upi://pay?pa=${encodeURIComponent(UPI_ID)}&pn=${encodeURIComponent(UPI_PAYEE_NAME)}&am=${total.toFixed(2)}&cu=INR&tn=${encodeURIComponent('Seats ' + seatNums.join(','))}`;
+  const isIOS = /iPhone|iPad|iPod/.test(navigator.userAgent);
+
+  const payButtonHtml = isIOS
+    ? `<p class="note" style="text-align:center; margin-top:0;">On iPhone, open GPay, PhonePe, or any UPI app and scan the code below to pay ${money(total)}. iOS doesn't support a universal "open app" link like Android does.</p>`
+    : `<button type="button" id="upiAppBtn" class="primary" style="display:block; text-align:center;">Pay ${money(total)} in UPI app</button>
+       <p class="note" style="text-align:center;">Tapping this opens your preferred UPI app (GPay, PhonePe, Paytm) with the amount filled in. On desktop, scan the code below instead.</p>`;
 
   modalRoot.innerHTML = `
     <div class="overlay">
@@ -480,8 +486,7 @@ function openDetailsSheet(){
         <h2>Book seat${seatNums.length>1?'s':''} ${seatNums.join(', ')}</h2>
         <p class="sub">${seatNums.length} × ₹${PRICE} + 5% tax</p>
 
-        <button type="button" id="upiAppBtn" class="primary" style="display:block; text-align:center;">Pay ${money(total)} in UPI app</button>
-        <p class="note" style="text-align:center;">Tapping this opens your preferred UPI app (GPay, PhonePe, Paytm) with the amount filled in. On desktop, scan the code below instead.</p>
+        ${payButtonHtml}
 
         <div class="qr-box" id="qrBox"></div>
         <div class="upi-id">${UPI_ID}</div>
@@ -510,7 +515,9 @@ function openDetailsSheet(){
   `;
   document.getElementById('closeX').onclick = closeSheet;
   document.getElementById('cancelBtn').onclick = closeSheet;
-  document.getElementById('upiAppBtn').onclick = () => { window.location.href = upiLink; };
+  if(!isIOS){
+    document.getElementById('upiAppBtn').onclick = () => { window.location.href = upiLink; };
+  }
   try{
     new QRCode(document.getElementById('qrBox'), {
       text: upiLink, width:170, height:170,
