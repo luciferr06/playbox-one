@@ -788,14 +788,18 @@ function showBookedSuccess(name, seatNums, ticketCode, dateLabel, timeLabel, mov
         <h2>You're in, ${toTitleCase(name).split(' ')[0]}</h2>
         <p class="sub">Seat${seatNums.length>1?'s':''} ${seatNums.join(', ')} · ${movie ? movie + ' · ' : ''}${dateLabel} · ${timeLabel}</p>
         <div class="ticket-code">${ticketCode}</div>
-        <p class="note">Your seat(s) are confirmed and booked. Use "View My Ticket" anytime with your phone number to look this up and download it.</p>
+        <p class="note">Your seat(s) are confirmed and booked. You can also find this anytime via "View My Ticket" with your phone number.</p>
         <div class="cta-bar" style="border-top:none;">
-          <button class="primary" id="doneBtn">Done</button>
+          <button class="primary" id="downloadBtn">Download Ticket (PDF)</button>
+          <button class="ghost" id="doneBtn">Done</button>
         </div>
       </div>
     </div>
   `;
   document.getElementById('doneBtn').onclick = closeSheet;
+  document.getElementById('downloadBtn').onclick = () => {
+    downloadTicketImage({ name, seatNums, ticketCode, dateLabel, timeLabel, movie });
+  };
 }
 
 /* ---------- View My Ticket ---------- */
@@ -835,15 +839,23 @@ function openViewTicketSheet(){
       const phoneHash = await sha256Hex(phone);
       const snap = await db.ref('bookings/' + phoneHash).once('value');
       const records = snap.exists() ? snap.val() : {};
-      const matches = Object.values(records);
-      if(matches.length === 0){
+      const rawMatches = Object.values(records);
+      if(rawMatches.length === 0){
         resultsEl.innerHTML = '<p class="empty-state">No bookings found for that number.</p>';
         return;
       }
+      const grouped = {};
+      rawMatches.forEach(m => {
+        const key = m.ticketCode || (m.showKey + '_' + m.seatNum);
+        if(!grouped[key]) grouped[key] = { ...m, seatNums: [] };
+        grouped[key].seatNums.push(m.seatNum);
+      });
+      const matches = Object.values(grouped);
+      matches.forEach(m => m.seatNums.sort((a,b) => a-b));
       matches.sort((a,b) => (a.showKey||'').localeCompare(b.showKey||''));
       resultsEl.innerHTML = matches.map((m, i) => `
         <div class="ticket-match">
-          <div class="top"><b>Seat ${m.seatNum}</b><span>${m.dateLabel || ''}</span></div>
+          <div class="top"><b>Seat${m.seatNums.length>1?'s':''} ${m.seatNums.join(', ')}</b><span>${m.dateLabel || ''}</span></div>
           <div class="sub">${m.movie ? m.movie + '<br>' : ''}${m.timeLabel || ''}<br>Code: ${m.ticketCode || '—'}</div>
           <button class="primary" data-idx="${i}" style="margin-top:0;">Download Ticket (PDF)</button>
         </div>
@@ -863,6 +875,8 @@ function openViewTicketSheet(){
 
 function downloadTicketImage(match){
   const { jsPDF } = window.jspdf;
+  const seatNums = match.seatNums || [match.seatNum];
+  const seatLabel = seatNums.length > 1 ? seatNums.join(', ') : String(seatNums[0]);
   const W = 220, H = 320;
   const doc = new jsPDF({ unit:'pt', format:[W, H] });
 
@@ -882,7 +896,7 @@ function downloadTicketImage(match){
     ['Movie', match.movie || '—'],
     ['Date', match.dateLabel || '—'],
     ['Time', match.timeLabel || '—'],
-    ['Seat', String(match.seatNum)],
+    [seatNums.length > 1 ? 'Seats' : 'Seat', seatLabel],
     ['Name', toTitleCase(match.name) || '—']
   ];
   let y = 64;
@@ -892,7 +906,14 @@ function downloadTicketImage(match){
     doc.setTextColor(138,138,138);
     doc.text(label, 20, y);
     doc.setTextColor(245,245,245);
-    doc.text(String(val), W-20, y, { align:'right' });
+    const valStr = String(val);
+    if(doc.getTextWidth(valStr) > 130){
+      doc.setFontSize(9);
+      doc.text(valStr, W-20, y, { align:'right', maxWidth: 140 });
+      doc.setFontSize(10);
+    } else {
+      doc.text(valStr, W-20, y, { align:'right' });
+    }
     y += 24;
   });
 
@@ -903,7 +924,7 @@ function downloadTicketImage(match){
   doc.setFontSize(9);
   doc.text('Code: ' + (match.ticketCode || '—'), W/2, y+22, { align:'center' });
 
-  doc.save('playbox-ticket-seat' + match.seatNum + '.pdf');
+  doc.save('playbox-ticket-seats' + seatNums.join('-') + '.pdf');
 }
 
 /* ---------- Organizer panel ---------- */
