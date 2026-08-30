@@ -6,24 +6,24 @@
 <title>Playbox — Ticket Booking</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-database-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
   :root{
-    --bg-night:#0D0D0D;
-    --bg-panel:#161616;
-    --accent-amber:#F5F5F5;
-    --accent-amber-dim:#55555588;
-    --accent-gold:#CFCFCF;
-    --accent-gold-dim:#3A3A3A;
-    --accent-rose:#AAAAAA;
-    --accent-rose-dim:#2A2A2A;
-    --accent-sel:#F5F5F5;
-    --text-cream:#F5F5F5;
-    --text-muted:#8A8A8A;
-    --border-soft:#2E2E2E;
+    --bg-night:#F4EFEA;
+    --bg-panel:#FBF8F4;
+    --accent-amber:#4A3B33;
+    --accent-amber-dim:#C9B8A888;
+    --accent-gold:#7FA378;
+    --accent-gold-dim:#DDE9D8;
+    --accent-rose:#C1626A;
+    --accent-rose-dim:#F3D8DA;
+    --accent-sel:#A8C3A0;
+    --text-cream:#4A3B33;
+    --text-muted:#9C8577;
+    --border-soft:#E3D8CC;
   }
   *{box-sizing:border-box;}
   body{
@@ -72,7 +72,7 @@
     cursor:pointer; white-space:nowrap;
   }
   .day-tab.active, .show-tab.active{
-    background:var(--accent-amber); border-color:var(--accent-amber); color:#111111; font-weight:700;
+    background:var(--accent-amber); border-color:var(--accent-amber); color:#FBF8F4; font-weight:700;
   }
   .show-tabs{ margin-top:8px; }
 
@@ -123,10 +123,10 @@
   }
   button.primary{
     width:100%; padding:14px; border:none; border-radius:10px;
-    background:var(--accent-amber); color:#111111; font-family:'Inter',sans-serif;
+    background:var(--accent-amber); color:#FBF8F4; font-family:'Inter',sans-serif;
     font-weight:700; font-size:15px; cursor:pointer;
   }
-  button.primary:disabled{ background:#3A3F4E; color:#7A7F8E; cursor:not-allowed; }
+  button.primary:disabled{ background:#E3D8CC; color:#B0A290; cursor:not-allowed; }
   button.ghost{
     width:100%; padding:12px; margin-top:8px; border:1px solid var(--border-soft); border-radius:10px;
     background:transparent; color:var(--text-muted); font-family:'Inter',sans-serif; font-size:13px; cursor:pointer;
@@ -167,7 +167,7 @@
   }
   input{
     width:100%; padding:11px 12px; border-radius:8px; border:1px solid var(--border-soft);
-    background:#151822; color:var(--text-cream); font-family:'Inter',sans-serif; font-size:14px;
+    background:#EFE6DC; color:var(--text-cream); font-family:'Inter',sans-serif; font-size:14px;
   }
   input:focus{outline:2px solid var(--accent-amber); outline-offset:1px;}
   .price-line{ display:flex; justify-content:space-between; font-size:14px; margin:10px 0 4px; color:var(--text-muted); }
@@ -191,7 +191,7 @@
   .pay-id-row{
     display:flex; align-items:center; justify-content:space-between; gap:8px;
     font-family:'JetBrains Mono',monospace; font-size:13px;
-    background:#151822; border:1px dashed var(--border-soft); border-radius:8px;
+    background:#EFE6DC; border:1px dashed var(--border-soft); border-radius:8px;
     padding:10px 12px; margin-bottom:8px;
   }
   .pay-id-row button{
@@ -202,11 +202,11 @@
 
   .success .icon{
     width:52px;height:52px;border-radius:50%; background:var(--accent-amber);
-    display:flex;align-items:center;justify-content:center; font-size:24px; margin:0 auto 14px; color:#111111;
+    display:flex;align-items:center;justify-content:center; font-size:24px; margin:0 auto 14px; color:#FBF8F4;
   }
   .success{text-align:center;}
   .ticket-code{
-    font-family:'JetBrains Mono',monospace; letter-spacing:.1em; background:#151822;
+    font-family:'JetBrains Mono',monospace; letter-spacing:.1em; background:#EFE6DC;
     border:1px dashed var(--border-soft); border-radius:8px; padding:12px; margin:14px 0; font-size:14px;
     word-break:break-word;
   }
@@ -352,6 +352,30 @@ function toTitleCase(str){
 }
 function money(n){ return '₹' + n.toFixed(2).replace(/\.00$/, ''); }
 function normalizePhone(p){ return (p || '').replace(/\D/g, '').slice(-10); }
+function compressImageToDataUrl(file, maxSize){
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new Image();
+      img.onload = () => {
+        const scale = Math.min(1, maxSize / Math.max(img.width, img.height));
+        const w = Math.round(img.width * scale);
+        const h = Math.round(img.height * scale);
+        const canvas = document.createElement('canvas');
+        canvas.width = w; canvas.height = h;
+        const ctx = canvas.getContext('2d');
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0,0,w,h);
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/jpeg', 0.85));
+      };
+      img.onerror = reject;
+      img.src = e.target.result;
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
 
 /* ---------- Date / show helpers ---------- */
 
@@ -385,7 +409,7 @@ let selectedSeats = new Set();
 let eventInfo = {
   movie:'', showTimes:['10:00 AM','2:00 PM','6:00 PM'],
   contactEmail:'luciferr.06@icloud.com', instagram:'@playbox.one',
-  price:1, upiId:'luciferr.06@ybl', upiPhone:''
+  price:1, upiId:'luciferr.06@ybl', upiPhone:'', qrImageUrl:''
 };
 
 const rowsEl = document.getElementById('rows');
@@ -521,7 +545,8 @@ function applyIncomingEventInfo(stored){
       instagram: stored.instagram || eventInfo.instagram,
       price: (stored.price !== undefined && stored.price !== null && stored.price !== '') ? Number(stored.price) : eventInfo.price,
       upiId: stored.upiId || eventInfo.upiId,
-      upiPhone: stored.upiPhone !== undefined ? stored.upiPhone : eventInfo.upiPhone
+      upiPhone: stored.upiPhone !== undefined ? stored.upiPhone : eventInfo.upiPhone,
+      qrImageUrl: stored.qrImageUrl !== undefined ? stored.qrImageUrl : eventInfo.qrImageUrl
     };
   }
   PRICE = eventInfo.price;
@@ -627,7 +652,7 @@ function openDetailsSheet(){
         <p class="note" style="text-align:center; margin-top:0;">Tap an app to open it directly with the amount filled in. If it doesn't open (app not installed), use the QR code or ID below instead.</p>
         ${genericBtnHtml}
 
-        <div class="qr-box" id="qrBox" style="margin-top:14px;"></div>
+        <div class="qr-box" id="qrBox" style="margin-top:14px;">${eventInfo.qrImageUrl ? `<img src="${eventInfo.qrImageUrl}" alt="UPI QR code" />` : '<p style="color:#111111; font-size:12px; padding:20px; text-align:center;">No QR code uploaded yet — use the app icons or ID below.</p>'}</div>
 
         <div class="pay-id-row">
           <span>${UPI_ID}</span>
@@ -678,15 +703,6 @@ function openDetailsSheet(){
       }).catch(() => {});
     });
   });
-  try{
-    new QRCode(document.getElementById('qrBox'), {
-      text: upiLink, width:170, height:170,
-      colorDark:'#111111', colorLight:'#F2EDE4'
-    });
-  }catch(e){
-    console.error('QR generation failed', e);
-    document.getElementById('qrBox').innerHTML = '<p style="color:#111111; font-size:12px; padding:20px;">QR unavailable — use the UPI ID below.</p>';
-  }
   document.getElementById('continueBtn').onclick = () => {
     const name = document.getElementById('fname').value.trim();
     const contact = document.getElementById('fcontact').value.trim();
@@ -732,6 +748,22 @@ async function submitBooking(name, contact, email, ref){
   await new Promise(r => setTimeout(r, 800));
 
   try{
+    const allSnap = await db.ref('seats-status').once('value');
+    const allShows = allSnap.exists() ? allSnap.val() : {};
+    const refNormalized = ref.trim().toLowerCase();
+    let refAlreadyUsed = false;
+    Object.values(allShows).forEach(showSeats => {
+      Object.values(showSeats || {}).forEach(s => {
+        if(s && s.status === 'booked' && s.ref && s.ref.trim().toLowerCase() === refNormalized){
+          refAlreadyUsed = true;
+        }
+      });
+    });
+    if(refAlreadyUsed){
+      showFailure('This UPI transaction reference has already been used for another booking. Double-check the reference number from your payment app, or contact the organizer if you believe this is a mistake.');
+      return;
+    }
+
     const current = await getFreshSeats(showKey);
     const taken = [...selectedSeats].filter(idx => current[idx].status !== 'available');
     if(taken.length > 0){
@@ -846,7 +878,7 @@ function openViewTicketSheet(){
         <div class="ticket-match">
           <div class="top"><b>Seat ${m.seatNum}</b><span>${m.dateLabel || ''}</span></div>
           <div class="sub">${m.movie ? m.movie + '<br>' : ''}${m.timeLabel || ''}<br>Code: ${m.ticketCode || '—'}</div>
-          <button class="primary" data-idx="${i}" style="margin-top:0;">Download Ticket (JPG)</button>
+          <button class="primary" data-idx="${i}" style="margin-top:0;">Download Ticket (PDF)</button>
         </div>
       `).join('');
       resultsEl.querySelectorAll('button[data-idx]').forEach(btn => {
@@ -863,55 +895,48 @@ function openViewTicketSheet(){
 }
 
 function downloadTicketImage(match){
-  const canvas = document.createElement('canvas');
-  canvas.width = 640; canvas.height = 380;
-  const ctx = canvas.getContext('2d');
-  ctx.fillStyle = '#0D0D0D'; ctx.fillRect(0,0,640,380);
-  ctx.strokeStyle = '#2E2E2E'; ctx.lineWidth = 2; ctx.strokeRect(10,10,620,360);
+  const { jsPDF } = window.jspdf;
+  const W = 220, H = 320;
+  const doc = new jsPDF({ unit:'pt', format:[W, H] });
 
-  ctx.fillStyle = '#F5F5F5';
-  ctx.font = 'bold 34px sans-serif';
-  ctx.fillText('PLAYBOX', 32, 62);
-  ctx.fillStyle = '#8A8A8A';
-  ctx.font = '14px sans-serif';
-  ctx.fillText('Kalinga Nagar, Bhubaneswar', 32, 84);
+  doc.setFillColor(13,13,13);
+  doc.rect(0, 0, W, H, 'F');
 
-  ctx.strokeStyle = '#2E2E2E';
-  ctx.setLineDash([6,6]);
-  ctx.beginPath(); ctx.moveTo(32,102); ctx.lineTo(608,102); ctx.stroke();
-  ctx.setLineDash([]);
+  doc.setTextColor(245,245,245);
+  doc.setFont('courier', 'bold');
+  doc.setFontSize(15);
+  doc.text('PLAYBOX', W/2, 30, { align:'center' });
+
+  doc.setDrawColor(46,46,46);
+  doc.setLineDashPattern([2,2], 0);
+  doc.line(20, 42, W-20, 42);
 
   const rows = [
     ['Movie', match.movie || '—'],
     ['Date', match.dateLabel || '—'],
-    ['Show Time', match.timeLabel || '—'],
+    ['Time', match.timeLabel || '—'],
     ['Seat', String(match.seatNum)],
     ['Name', toTitleCase(match.name) || '—']
   ];
-  let y = 140;
+  let y = 64;
+  doc.setFont('courier', 'normal');
+  doc.setFontSize(10);
   rows.forEach(([label, val]) => {
-    ctx.fillStyle = '#8A8A8A'; ctx.font = '12px sans-serif';
-    ctx.fillText(label.toUpperCase(), 32, y);
-    ctx.fillStyle = '#F5F5F5'; ctx.font = 'bold 20px sans-serif';
-    ctx.fillText(String(val), 32, y + 24);
-    y += 46;
+    doc.setTextColor(138,138,138);
+    doc.text(label, 20, y);
+    doc.setTextColor(245,245,245);
+    doc.text(String(val), W-20, y, { align:'right' });
+    y += 24;
   });
 
-  ctx.fillStyle = '#CFCFCF';
-  ctx.font = '14px monospace';
-  ctx.fillText('Code: ' + (match.ticketCode || '—'), 32, 358);
+  doc.setLineDashPattern([2,2], 0);
+  doc.line(20, y+2, W-20, y+2);
 
-  canvas.toBlob((blob) => {
-    if(!blob) return;
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = 'playbox-ticket-seat' + match.seatNum + '.jpg';
-    document.body.appendChild(a);
-    a.click();
-    document.body.removeChild(a);
-    setTimeout(() => URL.revokeObjectURL(url), 3000);
-  }, 'image/jpeg', 0.92);
+  doc.setTextColor(207,207,207);
+  doc.setFontSize(9);
+  doc.text('Code: ' + (match.ticketCode || '—'), W/2, y+22, { align:'center' });
+
+  doc.save('playbox-ticket-seat' + match.seatNum + '.pdf');
 }
 
 /* ---------- Organizer panel ---------- */
@@ -1007,6 +1032,9 @@ async function openOrgPanel(){
           <input id="upiIdInput" type="text" placeholder="yourname@bank" value="${UPI_ID}" />
           <label for="upiPhoneInput">Phone number (alt. UPI payment method)</label>
           <input id="upiPhoneInput" type="tel" placeholder="+91 98765 43210" value="${UPI_PHONE}" />
+          <label for="qrUploadInput">UPI QR code image</label>
+          <input id="qrUploadInput" type="file" accept="image/*" />
+          ${eventInfo.qrImageUrl ? `<div class="qr-box" style="margin-top:8px; max-width:120px;"><img src="${eventInfo.qrImageUrl}" alt="Current QR code" style="width:100px; height:100px;" /></div><p class="note">Current QR shown above. Upload a new image and Save Details to replace it.</p>` : `<p class="note">No QR uploaded yet.</p>`}
           <button class="primary" id="saveInfoBtn" style="margin-top:12px;">Save Details</button>
         </div>
 
@@ -1024,6 +1052,8 @@ async function openOrgPanel(){
     closeSheet();
   };
   document.getElementById('saveInfoBtn').onclick = async () => {
+    const saveBtn = document.getElementById('saveInfoBtn');
+    saveBtn.disabled = true; saveBtn.textContent = 'Saving…';
     const movie = document.getElementById('movieInput').value.trim();
     const showTimes = [
       document.getElementById('show1Input').value.trim() || eventInfo.showTimes[0],
@@ -1037,7 +1067,13 @@ async function openOrgPanel(){
     const upiPhone = document.getElementById('upiPhoneInput').value.trim();
     const price = (!isNaN(priceVal) && priceVal >= 0) ? priceVal : PRICE;
     const upiId = upiIdVal || UPI_ID;
-    eventInfo = { movie, showTimes, contactEmail, instagram, price, upiId, upiPhone };
+    let qrImageUrl = eventInfo.qrImageUrl;
+    const qrFile = document.getElementById('qrUploadInput').files[0];
+    if(qrFile){
+      try{ qrImageUrl = await compressImageToDataUrl(qrFile, 300); }
+      catch(e){ console.error('QR image processing failed', e); }
+    }
+    eventInfo = { movie, showTimes, contactEmail, instagram, price, upiId, upiPhone, qrImageUrl };
     PRICE = price;
     UPI_ID = upiId;
     UPI_PHONE = upiPhone;
