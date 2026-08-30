@@ -12,18 +12,18 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <style>
   :root{
-    --bg-night:#F4EFEA;
-    --bg-panel:#FBF8F4;
-    --accent-amber:#4A3B33;
-    --accent-amber-dim:#C9B8A888;
-    --accent-gold:#7FA378;
-    --accent-gold-dim:#DDE9D8;
-    --accent-rose:#C1626A;
-    --accent-rose-dim:#F3D8DA;
-    --accent-sel:#A8C3A0;
-    --text-cream:#4A3B33;
-    --text-muted:#9C8577;
-    --border-soft:#E3D8CC;
+    --bg-night:#1C1410;
+    --bg-panel:#241C16;
+    --accent-amber:#D4A15A;
+    --accent-amber-dim:#8A6A3E88;
+    --accent-gold:#C79B5C;
+    --accent-gold-dim:#4A3A22;
+    --accent-rose:#B06B4E;
+    --accent-rose-dim:#4A2E24;
+    --accent-sel:#D4A15A;
+    --text-cream:#F3E8DA;
+    --text-muted:#A6906D;
+    --border-soft:#3A2E22;
   }
   *{box-sizing:border-box;}
   body{
@@ -72,7 +72,7 @@
     cursor:pointer; white-space:nowrap;
   }
   .day-tab.active, .show-tab.active{
-    background:var(--accent-amber); border-color:var(--accent-amber); color:#FBF8F4; font-weight:700;
+    background:var(--accent-amber); border-color:var(--accent-amber); color:#1C1410; font-weight:700;
   }
   .show-tabs{ margin-top:8px; }
 
@@ -123,10 +123,10 @@
   }
   button.primary{
     width:100%; padding:14px; border:none; border-radius:10px;
-    background:var(--accent-amber); color:#FBF8F4; font-family:'Inter',sans-serif;
+    background:var(--accent-amber); color:#1C1410; font-family:'Inter',sans-serif;
     font-weight:700; font-size:15px; cursor:pointer;
   }
-  button.primary:disabled{ background:#E3D8CC; color:#B0A290; cursor:not-allowed; }
+  button.primary:disabled{ background:#3A2E22; color:#8A7560; cursor:not-allowed; }
   button.ghost{
     width:100%; padding:12px; margin-top:8px; border:1px solid var(--border-soft); border-radius:10px;
     background:transparent; color:var(--text-muted); font-family:'Inter',sans-serif; font-size:13px; cursor:pointer;
@@ -167,7 +167,7 @@
   }
   input{
     width:100%; padding:11px 12px; border-radius:8px; border:1px solid var(--border-soft);
-    background:#EFE6DC; color:var(--text-cream); font-family:'Inter',sans-serif; font-size:14px;
+    background:#2A2018; color:var(--text-cream); font-family:'Inter',sans-serif; font-size:14px;
   }
   input:focus{outline:2px solid var(--accent-amber); outline-offset:1px;}
   .price-line{ display:flex; justify-content:space-between; font-size:14px; margin:10px 0 4px; color:var(--text-muted); }
@@ -191,7 +191,7 @@
   .pay-id-row{
     display:flex; align-items:center; justify-content:space-between; gap:8px;
     font-family:'JetBrains Mono',monospace; font-size:13px;
-    background:#EFE6DC; border:1px dashed var(--border-soft); border-radius:8px;
+    background:#2A2018; border:1px dashed var(--border-soft); border-radius:8px;
     padding:10px 12px; margin-bottom:8px;
   }
   .pay-id-row button{
@@ -202,11 +202,11 @@
 
   .success .icon{
     width:52px;height:52px;border-radius:50%; background:var(--accent-amber);
-    display:flex;align-items:center;justify-content:center; font-size:24px; margin:0 auto 14px; color:#FBF8F4;
+    display:flex;align-items:center;justify-content:center; font-size:24px; margin:0 auto 14px; color:#1C1410;
   }
   .success{text-align:center;}
   .ticket-code{
-    font-family:'JetBrains Mono',monospace; letter-spacing:.1em; background:#EFE6DC;
+    font-family:'JetBrains Mono',monospace; letter-spacing:.1em; background:#2A2018;
     border:1px dashed var(--border-soft); border-radius:8px; padding:12px; margin:14px 0; font-size:14px;
     word-break:break-word;
   }
