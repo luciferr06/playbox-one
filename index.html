@@ -651,16 +651,8 @@ function openDetailsSheet(){
         <h2>Book seat${seatNums.length>1?'s':''} ${seatNums.join(', ')}</h2>
         <p class="sub">${fullDateLabel(dateForOffset(selectedDayOffset))} · ${eventInfo.showTimes[selectedShowIndex]} · ${seatNums.length} × ₹${PRICE} + 5% tax</p>
 
-        <div class="upi-app-row">
-          <button type="button" class="upi-app-btn" data-app="gpay"><span class="badge" style="background:#4285F4;">G</span>GPay</button>
-          <button type="button" class="upi-app-btn" data-app="phonepe"><span class="badge" style="background:#5F259F;">Pe</span>PhonePe</button>
-          <button type="button" class="upi-app-btn" data-app="paytm"><span class="badge" style="background:#00BAF2;">P</span>Paytm</button>
-          <button type="button" class="upi-app-btn" data-app="bhim"><span class="badge" style="background:#00A651;">B</span>BHIM</button>
-        </div>
-        <p class="note" style="text-align:center; margin-top:0;">Tap an app to open it directly with the amount filled in. If it doesn't open (app not installed), use the QR code or ID below instead.</p>
-        ${genericBtnHtml}
-
-        <div class="qr-box" id="qrBox" style="margin-top:14px;">${eventInfo.qrImageUrl ? `<img src="${eventInfo.qrImageUrl}" alt="UPI QR code" />` : '<p style="color:#111111; font-size:12px; padding:20px; text-align:center;">No QR code uploaded yet — use the app icons or ID below.</p>'}</div>
+        <p class="note" style="text-align:center; margin-top:0; margin-bottom:4px;"><b>Recommended:</b> scan this QR code with your UPI app, or use the ID/number below.</p>
+        <div class="qr-box" id="qrBox">${eventInfo.qrImageUrl ? `<img src="${eventInfo.qrImageUrl}" alt="UPI QR code" />` : '<p style="color:#111111; font-size:12px; padding:20px; text-align:center;">No QR code uploaded yet — use the ID below.</p>'}</div>
 
         <div class="pay-id-row">
           <span>${UPI_ID}</span>
@@ -671,6 +663,18 @@ function openDetailsSheet(){
           <span>${UPI_PHONE}</span>
           <button type="button" data-copy="${UPI_PHONE}">Copy</button>
         </div>` : ''}
+
+        <details style="margin-top:14px;">
+          <summary style="cursor:pointer; color:var(--text-muted); font-size:12px;">Or try opening an app directly (may get blocked)</summary>
+          <div class="upi-app-row">
+            <button type="button" class="upi-app-btn" data-app="gpay"><span class="badge" style="background:#4285F4;">G</span>GPay</button>
+            <button type="button" class="upi-app-btn" data-app="phonepe"><span class="badge" style="background:#5F259F;">Pe</span>PhonePe</button>
+            <button type="button" class="upi-app-btn" data-app="paytm"><span class="badge" style="background:#00BAF2;">P</span>Paytm</button>
+            <button type="button" class="upi-app-btn" data-app="bhim"><span class="badge" style="background:#00A651;">B</span>BHIM</button>
+          </div>
+          <p class="note" style="text-align:center; margin-top:0;">Some UPI apps decline payments opened this way for security reasons, even when legitimate. If that happens, use the QR code or ID above instead.</p>
+          ${genericBtnHtml}
+        </details>
 
         <div class="price-line"><span>Subtotal</span><span>${money(subtotal)}</span></div>
         <div class="price-line"><span>Tax (5%)</span><span>${money(tax)}</span></div>
