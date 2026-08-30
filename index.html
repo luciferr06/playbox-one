@@ -627,7 +627,18 @@ function openDetailsSheet(){
         <h2>Book seat${seatNums.length>1?'s':''} ${seatNums.join(', ')}</h2>
         <p class="sub">${fullDateLabel(dateForOffset(selectedDayOffset))} · ${eventInfo.showTimes[selectedShowIndex]} · ${seatNums.length} × ₹${PRICE} + 5% tax</p>
 
-        <p class="note" style="text-align:center; margin-top:0; margin-bottom:4px;">Scan this QR code with your UPI app, or use the ID/number below.</p>
+        <label for="fname">Full name</label>
+        <input id="fname" type="text" placeholder="Jordan Rivers" />
+        <label for="fcontact">Contact</label>
+        <input id="fcontact" type="tel" placeholder="+91 98765 43210" />
+        <label for="femail">Email</label>
+        <input id="femail" type="email" placeholder="you@example.com" />
+
+        <div class="price-line" style="margin-top:16px;"><span>Subtotal</span><span>${money(subtotal)}</span></div>
+        <div class="price-line"><span>Tax (5%)</span><span>${money(tax)}</span></div>
+        <div class="price-line"><b>Total</b><b>${money(total)}</b></div>
+
+        <p class="note" style="text-align:center; margin-bottom:4px;">Scan this QR code with your UPI app, or use the ID/number below.</p>
         <div class="qr-box" id="qrBox">${eventInfo.qrImageUrl ? `<img src="${eventInfo.qrImageUrl}" alt="UPI QR code" />` : '<p style="color:#111111; font-size:12px; padding:20px; text-align:center;">No QR code uploaded yet — use the ID below.</p>'}</div>
 
         <div class="pay-id-row">
@@ -640,16 +651,6 @@ function openDetailsSheet(){
           <button type="button" data-copy="${UPI_PHONE}">Copy</button>
         </div>` : ''}
 
-        <div class="price-line"><span>Subtotal</span><span>${money(subtotal)}</span></div>
-        <div class="price-line"><span>Tax (5%)</span><span>${money(tax)}</span></div>
-        <div class="price-line"><b>Total</b><b>${money(total)}</b></div>
-
-        <label for="fname">Full name</label>
-        <input id="fname" type="text" placeholder="Jordan Rivers" />
-        <label for="fcontact">Contact</label>
-        <input id="fcontact" type="tel" placeholder="+91 98765 43210" />
-        <label for="femail">Email</label>
-        <input id="femail" type="email" placeholder="you@example.com" />
         <label for="ref">UPI transaction ref (from your app, after paying)</label>
         <input id="ref" type="text" placeholder="e.g. 234567891234" required />
 
