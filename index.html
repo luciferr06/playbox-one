@@ -1084,10 +1084,18 @@ async function openOrgPanel(){
     const resetBtn = document.getElementById('resetAllBtn');
     resetBtn.disabled = true; resetBtn.textContent = 'Resetting…';
     try{
-      const fresh = Array.from({length: TOTAL_SEATS}, blankSeat);
-      await db.ref('seats-status/' + showKey).set(seatsArrayToKeyed(fresh));
-      await db.ref('bookings-admin/' + showKey).remove();
-      seats = fresh;
+      const seatUpdates = {};
+      for(let i=1; i<=TOTAL_SEATS; i++){ seatUpdates[showKey + '/' + i] = blankSeat(); }
+      await db.ref('seats-status').update(seatUpdates);
+
+      const adminSnap = await db.ref('bookings-admin/' + showKey).once('value');
+      if(adminSnap.exists()){
+        const adminRemovals = {};
+        Object.keys(adminSnap.val()).forEach(seatNum => { adminRemovals[showKey + '/' + seatNum] = null; });
+        await db.ref('bookings-admin').update(adminRemovals);
+      }
+
+      seats = Array.from({length: TOTAL_SEATS}, blankSeat);
       renderSeats(); updateCta();
       openOrgPanel();
     }catch(e){
