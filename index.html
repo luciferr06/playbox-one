@@ -238,7 +238,7 @@
 
 <div class="ticket-wrap">
   <div class="stub">
-    <p class="eyebrow">Live Session · SUM HOSPITAL, RING SQUARE</p>
+    <p class="eyebrow">Live Session · Kalinga Nagar</p>
     <h1>Playbox</h1>
     <div class="meta">
       <span id="eventDate">—</span>
@@ -325,7 +325,15 @@ let UPI_ID = 'luciferr.06@ybl';
 let UPI_PHONE = '';
 const UPI_PAYEE_NAME = 'Playbox';
 
-function blankSeat(){ return { status:'available', name:'', contact:'', email:'', ref:'', time:'' }; }
+function blankSeat(){ return { status:'available' }; }
+async function sha256Hex(str){
+  const enc = new TextEncoder().encode(str);
+  const buf = await crypto.subtle.digest('SHA-256', enc);
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+function safeRefKey(ref){
+  return ref.trim().toLowerCase().replace(/[.#$/\[\]]/g, '_');
+}
 function seatsArrayToKeyed(arr){
   const obj = {};
   arr.forEach((s, i) => { obj[i+1] = s; });
@@ -748,18 +756,9 @@ async function submitBooking(name, contact, email, ref){
   await new Promise(r => setTimeout(r, 800));
 
   try{
-    const allSnap = await db.ref('seats-status').once('value');
-    const allShows = allSnap.exists() ? allSnap.val() : {};
-    const refNormalized = ref.trim().toLowerCase();
-    let refAlreadyUsed = false;
-    Object.values(allShows).forEach(showSeats => {
-      Object.values(showSeats || {}).forEach(s => {
-        if(s && s.status === 'booked' && s.ref && s.ref.trim().toLowerCase() === refNormalized){
-          refAlreadyUsed = true;
-        }
-      });
-    });
-    if(refAlreadyUsed){
+    const refKey = safeRefKey(ref);
+    const refSnap = await db.ref('used-refs/' + refKey).once('value');
+    if(refSnap.exists()){
       showFailure('This UPI transaction reference has already been used for another booking. Double-check the reference number from your payment app, or contact the organizer if you believe this is a mistake.');
       return;
     }
@@ -771,15 +770,28 @@ async function submitBooking(name, contact, email, ref){
       seats = current; selectedSeats.clear(); renderSeats(); updateCta();
       return;
     }
+
     const time = new Date().toISOString();
-    const updates = {};
     const ticketCode = 'PB-' + seatNums.join('-') + '-' + Math.random().toString(36).slice(2,6).toUpperCase();
+    const phoneHash = await sha256Hex(normalizePhone(contact));
+
+    const publicUpdates = {};
+    const adminUpdates = {};
+    const lookupUpdates = {};
     selectedSeats.forEach(idx => {
-      const seatData = { status:'booked', name, contact, email, ref, time, ticketCode, movie, dateLabel, timeLabel, showKey, seatNum: idx+1 };
-      current[idx] = seatData;
-      updates[(idx+1)] = seatData;
+      const seatNum = idx + 1;
+      const fullRecord = { name, contact, email, ref, time, ticketCode, movie, dateLabel, timeLabel, showKey, seatNum };
+      current[idx] = { status:'booked' };
+      publicUpdates[showKey + '/' + seatNum] = { status:'booked' };
+      adminUpdates[showKey + '/' + seatNum] = fullRecord;
+      lookupUpdates[phoneHash + '/' + ticketCode + '_seat' + seatNum] = fullRecord;
     });
-    await db.ref('seats-status/' + showKey).update(updates);
+
+    await db.ref('seats-status').update(publicUpdates);
+    await db.ref('bookings-admin').update(adminUpdates);
+    await db.ref('bookings').update(lookupUpdates);
+    await db.ref('used-refs/' + refKey).set(true);
+
     seats = current;
     showBookedSuccess(name, seatNums, ticketCode, dateLabel, timeLabel, movie);
     selectedSeats.clear();
@@ -857,18 +869,10 @@ function openViewTicketSheet(){
     errEl.style.display = 'none';
     resultsEl.innerHTML = '<div class="spinner"></div>';
     try{
-      const snap = await db.ref('seats-status').once('value');
-      const allShows = snap.exists() ? snap.val() : {};
-      const matches = [];
-      Object.keys(allShows).forEach(showKey => {
-        const showSeats = allShows[showKey] || {};
-        Object.keys(showSeats).forEach(seatKey => {
-          const s = showSeats[seatKey];
-          if(s && s.status === 'booked' && normalizePhone(s.contact) === phone){
-            matches.push(s);
-          }
-        });
-      });
+      const phoneHash = await sha256Hex(phone);
+      const snap = await db.ref('bookings/' + phoneHash).once('value');
+      const records = snap.exists() ? snap.val() : {};
+      const matches = Object.values(records);
       if(matches.length === 0){
         resultsEl.innerHTML = '<p class="empty-state">No bookings found for that number.</p>';
         return;
@@ -983,13 +987,18 @@ function openPinSheet(){
 
 async function openOrgPanel(){
   const showKey = showKeyFor(selectedDayOffset, selectedShowIndex);
+  let bookedDetails = {};
   try{
     seats = await getFreshSeats(showKey);
     const infoSnap = await db.ref('event-info').once('value');
     applyIncomingEventInfo(infoSnap.exists() ? infoSnap.val() : null);
+    const adminSnap = await db.ref('bookings-admin/' + showKey).once('value');
+    bookedDetails = adminSnap.exists() ? adminSnap.val() : {};
   }catch(e){ console.error(e); }
 
-  const booked = seats.map((s,i) => ({...s, seatNum:i+1})).filter(s => s.status === 'booked');
+  const booked = seats
+    .map((s,i) => ({ seatNum:i+1, status:s.status, ...(bookedDetails[i+1] || {}) }))
+    .filter(s => s.status === 'booked');
 
   let rowsHtml = '';
   if(booked.length === 0){
@@ -998,7 +1007,7 @@ async function openOrgPanel(){
     rowsHtml = booked.map(s => `
       <div class="org-row">
         <div class="top"><b>Seat ${s.seatNum}</b><span>₹${PRICE}</span></div>
-        <div class="sub">${toTitleCase(s.name)} · ${s.contact || '—'} · ${s.email}${s.ref ? ' · ref: ' + s.ref : ''}</div>
+        <div class="sub">${toTitleCase(s.name)} · ${s.contact || '—'} · ${s.email || '—'}${s.ref ? ' · ref: ' + s.ref : ''}</div>
         <div class="org-actions">
           <button data-seat="${s.seatNum}">Release Seat (mistake / no-show)</button>
         </div>
@@ -1086,6 +1095,7 @@ async function openOrgPanel(){
     if(!confirm('Reset all ' + TOTAL_SEATS + ' seats to available for this show only? This clears every booking for ' + fullDateLabel(dateForOffset(selectedDayOffset)) + ' · ' + eventInfo.showTimes[selectedShowIndex] + '.')) return;
     const fresh = Array.from({length: TOTAL_SEATS}, blankSeat);
     await db.ref('seats-status/' + showKey).set(seatsArrayToKeyed(fresh));
+    await db.ref('bookings-admin/' + showKey).remove();
     seats = fresh;
     renderSeats(); updateCta();
     openOrgPanel();
@@ -1101,7 +1111,14 @@ async function openOrgPanel(){
 
 async function releaseSeat(showKey, seatNum){
   try{
+    const adminSnap = await db.ref('bookings-admin/' + showKey + '/' + seatNum).once('value');
+    const record = adminSnap.exists() ? adminSnap.val() : null;
     await db.ref('seats-status/' + showKey + '/' + seatNum).set(blankSeat());
+    await db.ref('bookings-admin/' + showKey + '/' + seatNum).remove();
+    if(record && record.contact && record.ticketCode){
+      const phoneHash = await sha256Hex(normalizePhone(record.contact));
+      await db.ref('bookings/' + phoneHash + '/' + record.ticketCode + '_seat' + seatNum).remove();
+    }
   }catch(e){ console.error(e); }
 }
 </script>
