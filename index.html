@@ -1081,12 +1081,20 @@ async function openOrgPanel(){
   };
   document.getElementById('resetAllBtn').onclick = async () => {
     if(!confirm('Reset all ' + TOTAL_SEATS + ' seats to available for this show only? This clears every booking for ' + fullDateLabel(dateForOffset(selectedDayOffset)) + ' · ' + eventInfo.showTimes[selectedShowIndex] + '.')) return;
-    const fresh = Array.from({length: TOTAL_SEATS}, blankSeat);
-    await db.ref('seats-status/' + showKey).set(seatsArrayToKeyed(fresh));
-    await db.ref('bookings-admin/' + showKey).remove();
-    seats = fresh;
-    renderSeats(); updateCta();
-    openOrgPanel();
+    const resetBtn = document.getElementById('resetAllBtn');
+    resetBtn.disabled = true; resetBtn.textContent = 'Resetting…';
+    try{
+      const fresh = Array.from({length: TOTAL_SEATS}, blankSeat);
+      await db.ref('seats-status/' + showKey).set(seatsArrayToKeyed(fresh));
+      await db.ref('bookings-admin/' + showKey).remove();
+      seats = fresh;
+      renderSeats(); updateCta();
+      openOrgPanel();
+    }catch(e){
+      console.error('Reset failed:', e);
+      alert('Reset failed: ' + (e && e.message ? e.message : 'unknown error') + '\n\nCheck that you are still signed in, and that your Firebase Rules match what was provided.');
+      resetBtn.disabled = false; resetBtn.textContent = 'Reset ALL Seats to AVAILABLE (this show)';
+    }
   };
   document.querySelectorAll('#orgRows button').forEach(btn => {
     btn.addEventListener('click', async () => {
@@ -1107,7 +1115,10 @@ async function releaseSeat(showKey, seatNum){
       const phoneHash = await sha256Hex(normalizePhone(record.contact));
       await db.ref('bookings/' + phoneHash + '/' + record.ticketCode + '_seat' + seatNum).remove();
     }
-  }catch(e){ console.error(e); }
+  }catch(e){
+    console.error('Release failed:', e);
+    alert('Releasing seat ' + seatNum + ' failed: ' + (e && e.message ? e.message : 'unknown error'));
+  }
 }
 </script>
 
