@@ -716,17 +716,17 @@ async function submitBooking(name, contact, email, ref){
       </div>
     </div>
   `;
-  await new Promise(r => setTimeout(r, 800));
 
   try{
     const refKey = safeRefKey(ref);
-    const refSnap = await db.ref('used-refs/' + refKey).once('value');
+    const [refSnap, current] = await Promise.all([
+      db.ref('used-refs/' + refKey).once('value'),
+      getFreshSeats(showKey)
+    ]);
     if(refSnap.exists()){
       showFailure('This UPI transaction reference has already been used for another booking. Double-check the reference number from your payment app, or contact the organizer if you believe this is a mistake.');
       return;
     }
-
-    const current = await getFreshSeats(showKey);
     const taken = [...selectedSeats].filter(idx => current[idx].status !== 'available');
     if(taken.length > 0){
       showFailure('Seat(s) ' + taken.map(i=>i+1).join(', ') + ' were just taken by someone else. Pick different seats.');
@@ -750,15 +750,19 @@ async function submitBooking(name, contact, email, ref){
       lookupUpdates[phoneHash + '/' + ticketCode + '_seat' + seatNum] = fullRecord;
     });
 
+    // Write the public seat status first so other devices see it as fast as possible.
     await db.ref('seats-status').update(publicUpdates);
-    await db.ref('bookings-admin').update(adminUpdates);
-    await db.ref('bookings').update(lookupUpdates);
-    await db.ref('used-refs/' + refKey).set(true);
-
     seats = current;
     showBookedSuccess(name, seatNums, ticketCode, dateLabel, timeLabel, movie);
     selectedSeats.clear();
     renderSeats(); updateCta();
+
+    // Secondary bookkeeping doesn't block the seat map update — run in parallel.
+    await Promise.all([
+      db.ref('bookings-admin').update(adminUpdates),
+      db.ref('bookings').update(lookupUpdates),
+      db.ref('used-refs/' + refKey).set(true)
+    ]);
   }catch(e){
     console.error(e);
     showFailure('Something went wrong confirming your seat(s). Please try again.');
