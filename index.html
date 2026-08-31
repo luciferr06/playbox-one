@@ -310,7 +310,7 @@ const TOTAL_SEATS = ROWS * PER_ROW;
 const NUM_DAYS = 5;
 const NUM_SHOWS_PER_DAY = 3;
 let PRICE = 1;
-const TAX_RATE = 0.05;
+let TAX_RATE = 0.05;
 let UPI_ID = 'luciferr.06@ybl';
 let UPI_PHONE = '';
 const UPI_PAYEE_NAME = 'Playbox';
@@ -407,7 +407,7 @@ let selectedSeats = new Set();
 let eventInfo = {
   movie:'', showTimes:['10:00 AM','2:00 PM','6:00 PM'],
   contactEmail:'luciferr.06@icloud.com', instagram:'@playbox.one',
-  price:1, upiId:'luciferr.06@ybl', upiPhone:'', qrImageUrl:''
+  price:1, upiId:'luciferr.06@ybl', upiPhone:'', qrImageUrl:'', taxPercent:5
 };
 
 const rowsEl = document.getElementById('rows');
@@ -544,12 +544,14 @@ function applyIncomingEventInfo(stored){
       price: (stored.price !== undefined && stored.price !== null && stored.price !== '') ? Number(stored.price) : eventInfo.price,
       upiId: stored.upiId || eventInfo.upiId,
       upiPhone: stored.upiPhone !== undefined ? stored.upiPhone : eventInfo.upiPhone,
-      qrImageUrl: stored.qrImageUrl !== undefined ? stored.qrImageUrl : eventInfo.qrImageUrl
+      qrImageUrl: stored.qrImageUrl !== undefined ? stored.qrImageUrl : eventInfo.qrImageUrl,
+      taxPercent: (stored.taxPercent !== undefined && stored.taxPercent !== null && stored.taxPercent !== '') ? Number(stored.taxPercent) : eventInfo.taxPercent
     };
   }
   PRICE = eventInfo.price;
   UPI_ID = eventInfo.upiId;
   UPI_PHONE = eventInfo.upiPhone;
+  TAX_RATE = eventInfo.taxPercent / 100;
   renderEventInfo();
   updateCta();
 }
@@ -599,6 +601,44 @@ function switchShow(){
 async function getFreshSeats(showKey){
   const snapshot = await db.ref('seats-status/' + showKey).once('value');
   return normalizeSeats(snapshot.exists() ? snapshot.val() : null);
+}
+
+async function cleanupExpiredShows(){
+  try{
+    const todayKey = dateKey(new Date());
+    const seatsSnap = await db.ref('seats-status').once('value');
+    const allShowKeys = seatsSnap.exists() ? Object.keys(seatsSnap.val()) : [];
+    const expiredShowKeys = allShowKeys.filter(sk => {
+      const datePart = sk.split('_')[0];
+      return datePart < todayKey;
+    });
+    if(expiredShowKeys.length === 0) return;
+
+    const updates = {};
+    expiredShowKeys.forEach(sk => {
+      updates['seats-status/' + sk] = null;
+      updates['bookings-admin/' + sk] = null;
+    });
+
+    const bookingsSnap = await db.ref('bookings').once('value');
+    if(bookingsSnap.exists()){
+      const allBookings = bookingsSnap.val();
+      Object.keys(allBookings).forEach(phoneHash => {
+        const byBookingId = allBookings[phoneHash] || {};
+        Object.keys(byBookingId).forEach(bookingId => {
+          const record = byBookingId[bookingId];
+          if(record && expiredShowKeys.includes(record.showKey)){
+            updates['bookings/' + phoneHash + '/' + bookingId] = null;
+          }
+        });
+      });
+    }
+
+    await db.ref().update(updates);
+    console.log('Cleaned up ' + expiredShowKeys.length + ' expired show(s):', expiredShowKeys);
+  }catch(e){
+    console.error('Cleanup failed (non-critical):', e);
+  }
 }
 
 initEventInfoListener();
@@ -961,6 +1001,7 @@ function openPinSheet(){
     goBtn.disabled = true; goBtn.textContent = 'Signing in…';
     try{
       await auth.signInWithEmailAndPassword(emailInput.value.trim(), pwInput.value);
+      cleanupExpiredShows();
       openOrgPanel();
     }catch(e){
       errEl.textContent = 'Sign-in failed. Check your email and password.';
@@ -1025,6 +1066,8 @@ async function openOrgPanel(){
           <input id="instagramInput" type="text" placeholder="@yourhandle" value="${eventInfo.instagram || ''}" />
           <label for="priceInput">Ticket price (₹)</label>
           <input id="priceInput" type="number" min="0" step="0.01" placeholder="1" value="${PRICE}" />
+          <label for="taxInput">Tax (%)</label>
+          <input id="taxInput" type="number" min="0" step="0.1" placeholder="5" value="${eventInfo.taxPercent}" />
           <label for="upiIdInput">UPI ID</label>
           <input id="upiIdInput" type="text" placeholder="yourname@bank" value="${UPI_ID}" />
           <label for="upiPhoneInput">Phone number (alt. UPI payment method)</label>
@@ -1060,9 +1103,11 @@ async function openOrgPanel(){
     const contactEmail = document.getElementById('contactEmailInput').value.trim();
     const instagram = document.getElementById('instagramInput').value.trim();
     const priceVal = parseFloat(document.getElementById('priceInput').value);
+    const taxVal = parseFloat(document.getElementById('taxInput').value);
     const upiIdVal = document.getElementById('upiIdInput').value.trim();
     const upiPhone = document.getElementById('upiPhoneInput').value.trim();
     const price = (!isNaN(priceVal) && priceVal >= 0) ? priceVal : PRICE;
+    const taxPercent = (!isNaN(taxVal) && taxVal >= 0) ? taxVal : eventInfo.taxPercent;
     const upiId = upiIdVal || UPI_ID;
     let qrImageUrl = eventInfo.qrImageUrl;
     const qrFile = document.getElementById('qrUploadInput').files[0];
@@ -1070,10 +1115,11 @@ async function openOrgPanel(){
       try{ qrImageUrl = await compressImageToDataUrl(qrFile, 300); }
       catch(e){ console.error('QR image processing failed', e); }
     }
-    eventInfo = { movie, showTimes, contactEmail, instagram, price, upiId, upiPhone, qrImageUrl };
+    eventInfo = { movie, showTimes, contactEmail, instagram, price, upiId, upiPhone, qrImageUrl, taxPercent };
     PRICE = price;
     UPI_ID = upiId;
     UPI_PHONE = upiPhone;
+    TAX_RATE = taxPercent / 100;
     await db.ref('event-info').set(eventInfo);
     renderEventInfo();
     updateCta();
